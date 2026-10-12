@@ -1,0 +1,14 @@
+{
+  "name": "futa-world",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FUTA World — plain static world front end (public/) + one Vercel API function (api/) backed by Supabase.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node tools/test/api-node.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

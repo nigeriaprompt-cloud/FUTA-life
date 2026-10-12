@@ -1446,4 +1446,16 @@ function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000
   const ld = document.getElementById("load");
   if (ld) ld.remove();
 })();
-</script></body></html>
+</script>
+<!-- ==== game layer (Phase 0): avatar builder + window.FUTA bridge + realtime.
+     These tags are the ONLY change made inside the map file; everything else
+     goes through window.FUTA (docs/ARCHITECTURE.md §5). See docs/CHANGELOG.md. ==== -->
+<script src="game/avatar/avatar-options.js"></script>
+<script src="game/avatar/avatar-core.js"></script>
+<script src="game/avatar/avatar-body.js"></script>
+<script src="game/avatar/avatar-wear.js"></script>
+<script src="game/avatar/avatar-rig.js"></script>
+<script src="game/avatar/avatar-build.js"></script>
+<script src="game/net/bridge.js"></script>
+<script src="game/net/realtime.js"></script>
+</body></html>

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": null,
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/v1", "destination": "/api/index?path=" },
+    { "source": "/api/v1/:path*", "destination": "/api/index?path=:path*" },
+    { "source": "/world", "destination": "/world/futa-map-modern.html" },
+    { "source": "/world/", "destination": "/world/futa-map-modern.html" }
+  ]
+}

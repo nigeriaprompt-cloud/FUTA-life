@@ -4,8 +4,8 @@
    ========================================================================== */
 window.FUTA_CONFIG = {
   // true  = everything runs in the browser (fake accounts in localStorage) so you can preview the whole flow.
-  // false = real calls to the PHP API described in docs/API.md (api/v1/...).
-  demo: true,
+  // false = real calls to the Node (Vercel) API described in docs/API.md (api/v1/...).
+  demo: false,
   apiBase: '/api/v1',
   // Google Identity Services "Web client ID" from Google Cloud Console (leave '' to hide the Google button's real login in demo mode).
   googleClientId: '',

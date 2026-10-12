@@ -1,23 +1,27 @@
 # API contract
 
-REST over HTTPS, JSON in/out, under `/api/v1`. Authentication = the site's existing session cookie. Every POST/PUT/DELETE needs the CSRF
-header `X-CSRF-Token`. Use the site's existing router and style; these are the required routes and shapes.
+REST over HTTPS, JSON in/out, under `/api/v1`. Authentication = the session cookie `futa_sid` (HttpOnly, SameSite=Lax; the cookie holds a
+server-verified random id — sessions live in the database, so logout really revokes). Every POST/PUT/DELETE needs the CSRF header
+`X-CSRF-Token` echoing the readable `futa_csrf` cookie; if your client is missing that cookie, call `GET /me` once first (any GET hands
+one out). Use the site's existing router and style; these are the required routes and shapes.
 
 Errors: HTTP status + `{"error":{"code":"insufficient_funds","message":"…"}}`. Success: `{"data":…}`. Lists: `{"data":[…],"next":"cursor|null"}`.
 Money fields end in `_kobo` or `_coins`. Timestamps are ISO-8601 UTC. Role needed is in brackets; no bracket = any logged-in user.
 
-## 0. Sign-up and account (built — `api/v1/index.php`; client `onboarding/api.js`)
-All responses are JSON `{ok:true,…}` or `{ok:false,error:"message"}` with a proper HTTP status. Cookie session (HttpOnly, SameSite=Lax). Add the site's CSRF token to every POST.
+## 0. Sign-up and account (built — `api/index.js` + `lib/`; client `onboarding/api.js`)
+All responses are JSON `{ok:true,…}` or `{ok:false,error:"message"}` with a proper HTTP status. Cookie session (HttpOnly, SameSite=Lax,
+server-side rows in `world_sessions`). CSRF: double submit — every POST must echo the `futa_csrf` cookie in `X-CSRF-Token`
+(`api.js` does this automatically; do `GET /me` once if you have no cookie). Auth routes are rate-limited 8/min per IP.
 - `POST /auth/register` `{email,password}` → `{needsVerify}`  (password ≥ 8; rate-limited)
 - `POST /auth/login` `{email,password}` → `{user}`
 - `POST /auth/google` `{credential}` → `{user}`  (server verifies the Google ID token: audience = our client id, issuer, expiry)
-- `POST /auth/logout`
+- `POST /auth/logout`  (revokes the session row server-side)
 - `GET /me` → `{user|null}`; `user = {id,email,username,dob,teen,avatar,life}`
 - `GET /username/check?u=name` → `{available,reason}`
 - `POST /me/profile` `{username,dob}` → `{user}`  (<13 → 403; <18 sets teen)
 - `POST /me/avatar` `{look}` → `{look}` (the **cleaned** look; client must use the returned one)
 - `POST /me/life` `{start}` → `{life}`  (id must be in the allowed list)
-Test script: `bash tools/test/api-test.sh`.
+Test script: `node tools/test/api-node.mjs` (runs the real handler with an in-memory DB; no Vercel/Supabase needed).
 
 ## 1. Time and world
 - `GET /time` → `{ "now":"2026-10-10T18:12:03+01:00", "tz":"Africa/Lagos", "epoch_ms":… }` (public)
@@ -29,10 +33,16 @@ Test script: `bash tools/test/api-test.sh`.
   - `POST /admin/world/rollback/{versionId}` **[superadmin]**
   - Every call writes `world_audit`.
 
-## 2. Realtime
-- `POST /realtime/token` → `{ "token":"…", "url":"wss://realtime.example.com", "expires_in":60 }`
+## 2. Realtime (built — Supabase Realtime, not a custom socket)
+- `POST /realtime/token` (signed in) → `{ "token":"<JWT>", "url":"https://<project>.supabase.co", "anonKey":"…", "expires_in":3600 }`
+  The JWT is HS256-signed with the project's JWT secret (`role:"authenticated"`, `sub`=user id, `user_metadata:{username,avatar_hash}`).
+  503 when realtime env vars are missing. Clients join **private** broadcast+presence channels `zone:<cellX>:<cellZ>` (100 m cells;
+  own cell + 8 neighbours) with `Authorization: Bearer <token>`; `move` broadcasts `{u,x,z}` ~5×/s. The `anonKey` is public by design —
+  RLS policies on `realtime.messages` (see `supabase/schema.sql`) only admit connections carrying our JWT.
 
 ## 3. Players and profiles
+- `GET /players/{username}/avatar` (public, **built**) → `{username, look}` — the cleaned look only (404 if none). Used by the world to
+  draw remote players; privacy gating arrives with `STYLE_AND_SOCIAL.md` rules (Phase 7).
 - `GET /me` → profile, avatar_json, balances, roles, unread counts
 - `PUT /me/profile` `{display_name,bio,privacy_flags}`; `PUT /me/avatar` `{avatar_json}` (server validates every slot item is owned and fits its slot)
 - `GET /players/{username}` → public profile: avatar, bio, shop, **owned cars and houses**, friend status (respects privacy flags)

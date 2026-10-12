@@ -1,7 +1,9 @@
 /* ==========================================================================
    FUTA onboarding — API client. One function per endpoint in docs/API.md.
    demo:true  -> answers locally (localStorage "futa.demo.db") so the flow can be previewed with no server.
-   demo:false -> fetch() the PHP endpoints. Cookies carry the session (credentials: 'include').
+   demo:false -> fetch() the Node (Vercel) endpoints. Cookies carry the session
+                 (credentials: 'include'); every POST echoes the futa_csrf cookie
+                 in the X-CSRF-Token header (the server refuses POSTs without it).
    Every function returns a Promise resolving to {ok:true,...} or rejecting with Error(message).
    ========================================================================== */
 (function (g) {
@@ -9,8 +11,20 @@
   const C = () => g.FUTA_CONFIG, KEY = 'futa.demo.db';
   const db = { read() { try { return JSON.parse(localStorage.getItem(KEY)) || { users: [], me: null }; } catch (e) { return { users: [], me: null }; } }, write(d) { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { /* private mode */ } } };
   const wait = (v) => new Promise(r => setTimeout(() => r(v), 260));
+  const cookie = (name) => (document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)')) || [])[1] || '';
+  async function ensureCsrf() {
+    if (cookie('futa_csrf')) return;                       // GET /me hands out the cookie if missing
+    try { await fetch(C().apiBase + '/me', { credentials: 'include', headers: { 'Accept': 'application/json' } }); } catch (e) { /* offline; POST will 403 and the caller shows the error */ }
+  }
   async function http(method, path, body) {
-    const res = await fetch(C().apiBase + path, { method, credentials: 'include', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const headers = { 'Accept': 'application/json' };
+    if (body !== undefined && body !== null) headers['Content-Type'] = 'application/json';
+    if (method !== 'GET') {
+      await ensureCsrf();
+      const tok = cookie('futa_csrf');
+      if (tok) headers['X-CSRF-Token'] = tok;
+    }
+    const res = await fetch(C().apiBase + path, { method, credentials: 'include', headers, body: body ? JSON.stringify(body) : undefined });
     let data = {}; try { data = await res.json(); } catch (e) { /* non-json */ }
     if (!res.ok || data.ok === false) throw new Error(data.error || ('Request failed (' + res.status + ')'));
     return data;

@@ -8,9 +8,9 @@ Conventions: `id BIGINT UNSIGNED AUTO_INCREMENT`, `created_at/updated_at TIMESTA
 soft-delete with `deleted_at` where users could lose data. Foreign keys with `ON DELETE` chosen deliberately (never cascade money tables).
 
 ## 1. Accounts and profiles
-**Sign-up prototype tables (see `api/sql/schema.sql`):** `world_users(id, email, password_hash NULL, google_sub NULL, username, dob, is_teen, avatar_json, life_start, created_at)`.
-Mapping rule: if the site already has `users`, do NOT add a parallel login. Add `world_players(user_id PK → users.id, username UNIQUE, dob, is_teen, avatar_json, avatar_hash, life_start, cash, energy, mood, …)` and `auth_identities(id, user_id, provider['password'|'google'], provider_user_id, UNIQUE(provider,provider_user_id))`, and point `api/v1/index.php` at them.
-`avatar_json` = the cleaned look, schema v1 (`docs/AVATAR_SPEC.md` §1). Store `avatar_hash = md5(avatar_json)` so clients cache built geometry.
+**Phase 0 tables (as deployed — `supabase/schema.sql`):** `world_users(id, email, password_hash NULL, google_sub NULL, username, dob, is_teen, avatar_json, life_start, created_at)`, plus `world_sessions` (server-side sessions) and `rate_limits` (per-IP counters via the `rate_limit_hit` SQL function). All three are RLS-locked (no policies = service-role only).
+Mapping rule for later phases: when the old site's `users` table is merged in, do NOT add a parallel login. Add `world_players(user_id PK → users.id, username UNIQUE, dob, is_teen, avatar_json, avatar_hash, life_start, cash, energy, mood, …)` and `auth_identities(id, user_id, provider['password'|'google'], provider_user_id, UNIQUE(provider,provider_user_id))`, and point `api/index.js` at them.
+`avatar_json` = the cleaned look, schema v1 (`docs/AVATAR_SPEC.md` §1). The realtime JWT carries `avatar_hash = sha1(avatar_json).slice(0,16)` so clients cache built geometry.
 
 - `users` — existing. Needs a unique `username` (3–20 chars, letters/digits/underscore). If missing, add it with a one-time "choose your username" step.
 - `player_profiles(user_id PK, display_name, bio, avatar_json, last_zone, last_x, last_z, privacy_flags, created_at)`
