@@ -1,0 +1,46 @@
+# Rules for Cline — FUTA World inside the social commerce site
+
+Read these first, every task: `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`. For sign-up/character/avatar work also read `docs/SIGNUP_AND_CHARACTER.md` and `docs/AVATAR_SPEC.md`; for gameplay feel read `docs/LIFE_LAYER.md`. Then read the doc for the area you touch
+(`DATA_MODEL.md`, `API.md`, `GAME_DESIGN.md`, `PAYMENTS.md`).
+
+## How to work
+1. **One roadmap phase per task.** Never start the next phase without being asked. If a task needs something from a later phase, stop and say so.
+2. **Discover before you build.** The social commerce site already exists (PHP). Before writing code, read the existing code and database
+   schema and reuse what is there (users, login, shops, products, orders, uploads). Extend; never duplicate or rename existing tables or routes.
+   Record what you found in `docs/EXISTING_SYSTEM.md` (Phase 0 deliverable).
+3. **Small steps, each one runnable.** After each step say what you changed and how to check it in the browser.
+4. **Ask when a doc is silent or contradicts the code.** Do not guess business rules (prices, fees, who may do what).
+5. Update the docs you touched, and add a line to `docs/CHANGELOG.md`, in the same task.
+
+## Hard rules
+- **The map file is a large single script (`futa-map-modern.html`, ~790 KB).** Do NOT rewrite, reformat or "clean up" it.
+  Add behaviour only through the `window.FUTA` bridge described in `ARCHITECTURE.md`. Splitting it into modules is its own task.
+- **Never change a building's name, footprint or position.** These are real places at FUTA, Akure. Names come from the world data, not from code.
+- **Money:** integers only (kobo for Naira, whole numbers for coins). Never floats. Every money movement goes through the ledger (`PAYMENTS.md`).
+- **Never trust the browser** for prices, ownership, balances, roles or payment success. The server decides. Paystack success is only
+  believed after the webhook / server-side verify call.
+- **Secrets** (Paystack keys, DB passwords, realtime signing secret) live in server config / environment only. Never in JS, HTML or git.
+- **PHP:** PDO prepared statements only, `password_hash`, CSRF token on every state-changing request, output-escape everything, validate
+  uploads (type, size, re-encode images). Follow the existing code style and folder layout of the site.
+- **Chat and names are user text:** insert with `textContent`, never `innerHTML`. Rate-limit and length-limit on the server.
+- **Admin:** every admin endpoint checks a role on the server. In this project the admin *UI* is out of scope until Phase 9; only the
+  tables, endpoints and permission checks described in the docs are built earlier.
+- **No new frameworks or build tools** (React, Vue, Webpack…) without asking. Plain ES modules for the front end; the realtime server is plain Node.js (`ws`).
+- **Performance budgets** (`ARCHITECTURE.md`) are requirements, not goals. Interiors, compounds, NPCs and avatars load lazily and are
+  disposed when far/unused. Instance and share geometry and materials.
+
+- **Safety defaults are non-negotiable:** the rules in `docs/STYLE_AND_SOCIAL.md` §2 (stranger DMs off, wave first, personal bubble, consent for interactions, block hides both, privacy switches) are enforced on the **server** and on by default. Never ship chat, interactions or gifting without them. Never build looks-based rankings of people or pay-to-message features.
+
+## Avatar and sign-up rules
+- **`public/world/game/avatar/avatar-options.json` is the single source of truth** for every choice. Edit it, then run `python3 tools/build-options.py`. Never hand-edit `avatar-options.js`.
+- The creator UI, the JS builder and `api/src/AvatarValidator.php` all read that JSON. Keep `FutaAvatar.look.normalize` and `AvatarValidator::clean` behaving the same.
+- **Never save a player's look without `AvatarValidator::clean($look, false)`.** The `true` flag (NPC uniforms) is for server-made NPC looks only and must never be reachable from a request.
+- Characters stay fast: one merged skinned mesh per look, cached and shared; no per-character textures; respect the LODs and the budgets in `docs/AVATAR_SPEC.md` §3. Check the HUD in `avatar/lab.html` after any avatar change (tris/char must not grow for LOD 1 and 2 without asking).
+- Do not copy another game's names, art or text for the Lagos life layer; design is original (`docs/LIFE_LAYER.md`).
+- **Deferred:** group contributions/crowdfunding and gifting-money features. Do not build them until the owner asks.
+- Small files, plain names, a header comment saying what the file does and how to change it. Settings live in `onboarding/config.js` (browser) and `api/config.php` (server).
+
+## Definition of done (every task)
+- It works in a desktop browser and a phone-size browser (390 px wide).
+- No console errors. No secrets in the client. Admin-only things refuse non-admins (test it).
+- Docs and CHANGELOG updated. A short "how I tested this" note in the task summary.

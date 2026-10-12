@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avatar lab (dev page)</title>
+<style>html,body{margin:0;background:#cfd8e3;font:12px system-ui}canvas{display:block}#hud{position:fixed;left:8px;top:8px;background:#000a;color:#fff;padding:6px 8px;border-radius:6px;white-space:pre}</style></head><body>
+<div id="hud"></div>
+<!-- DEV PAGE: renders characters so you can check looks / speed. Params: ?mode=roles|random|lod|poses|one&n=12&seed=1&role=student&frame=f -->
+<script src="../../vendor/three.min.js"></script>
+<script src="avatar-options.js"></script><script src="avatar-core.js"></script><script src="avatar-body.js"></script><script src="avatar-wear.js"></script><script src="avatar-rig.js"></script><script src="avatar-build.js"></script><script src="avatar-npc.js"></script>
+<script>
+const q = new URLSearchParams(location.search), mode = q.get('mode') || 'roles', FA = FutaAvatar;
+const W = innerWidth, H = innerHeight, r = new THREE.WebGLRenderer({ antialias: true }); r.outputEncoding = THREE.sRGBEncoding; r.setSize(W, H); r.setPixelRatio(Math.min(2, devicePixelRatio)); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xcfd8e3);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 0.6)); const sun = new THREE.DirectionalLight(0xfff2dd, 0.55); sun.position.set(2, 4, 3); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ color: 0x7d8794 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+let items = [], t0 = performance.now(), tot = { tris: 0, verts: 0, ms: 0 };
+const add = (av, x, z) => { av.group.position.set(x, 0, z || 0); scene.add(av.group); items.push(av); tot.tris += av.info.tris; tot.verts += av.info.verts; tot.ms += av.info.buildMs || 0; };
+const roles = FA.npc.roles, seed = +(q.get('seed') || 1), frame = q.get('frame');
+let cols = 0, rows = 1, span = 0.95;
+if (mode === 'roles') { const fr = ['m', 'f']; cols = roles.length; rows = 2; fr.forEach((f, j) => roles.forEach((ro, i) => add(FA.npc.create(ro, seed + i * 7 + j, { frame: f, lod: +(q.get('lod') || 0) }), (i - (cols - 1) / 2) * span + j * 0.45, -j * 1.3))); }
+if (mode === 'random') { const n = +(q.get('n') || 12); cols = Math.ceil(n / 2); rows = 2; for (let i = 0; i < n; i++) add(FA.create(FA.look.random(frame || (i % 2 ? 'f' : 'm'), seed + i), { lod: +(q.get('lod') || 0), shadow: false }), ((i >> 1) - (cols - 1) / 2) * span + (i % 2) * 0.45, -(i % 2) * 1.3); }
+if (mode === 'lod') { cols = 3; [0, 1, 2].forEach(l => add(FA.npc.create('student', seed, { frame: frame || 'f', lod: l }), (l - 1) * 1.1, 0)); span = 1.1; }
+if (mode === 'poses') { const names = FA.rig.poseNames; cols = names.length; names.forEach((p, i) => { const a = FA.npc.create('student', seed, { frame: frame || 'f', lod: 0 }); a.setPose(p, { snap: true }); add(a, (i - (cols - 1) / 2) * span, 0); }); }
+if (mode === 'one') { cols = 1; const a = FA.create(q.get('look') ? JSON.parse(q.get('look')) : FA.npc.look(q.get('role') || 'student', seed, frame || 'f'), { lod: 0, allowRestricted: true, props: FA.npc.props(q.get('role') || '') }); add(a, 0, 0); }
+const cam = new THREE.PerspectiveCamera(mode === 'one' ? 22 : 30, W / H, 0.1, 100); const zoom = +(q.get('zoom') || 1);
+const w = Math.max(1.4, cols * span + 0.3), dist = mode === 'one' ? 5.9 / zoom : Math.max(5, (w / 2) / Math.tan(cam.fov * Math.PI / 360) / (W / H) * 1.02 + 0.8);
+const fy = +(q.get('fy') || (mode === 'one' ? 0.95 : 0.9)); cam.position.set(0, fy + 0.25, dist); cam.lookAt(0, fy, mode === 'roles' || mode === 'random' ? -0.5 : 0);
+if (q.get('cam') === 'face') { cam.fov = 8; cam.updateProjectionMatrix(); cam.position.set(0.0, 1.6, 4.6); cam.lookAt(0, 1.6, 0); }
+const clock = new THREE.Clock(); function frame_() { const dt = clock.getDelta(); items.forEach(a => a.update(dt)); r.render(scene, cam); requestAnimationFrame(frame_); }
+items.forEach(a => a.update(0.016)); frame_();
+document.getElementById('hud').textContent = mode + '  chars ' + items.length + '  tris/char ' + Math.round(tot.tris / items.length) + '  verts/char ' + Math.round(tot.verts / items.length) + '  build ms/char ' + (tot.ms / items.length).toFixed(1) + '  total ' + Math.round(performance.now() - t0) + 'ms';
+window.__stats = { n: items.length, tris: tot.tris / items.length, verts: tot.verts / items.length, buildMs: tot.ms / items.length, total: performance.now() - t0 }; window.__done = true;
+addEventListener('error', e => { document.getElementById('hud').textContent += '\nERR ' + e.message; window.__err = e.message; });
+</script></body></html>
