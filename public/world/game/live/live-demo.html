@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Live world demo (dev page)</title>
+<style>html,body{margin:0;height:100%;background:#b9c7d8;overflow:hidden;font:13px system-ui}canvas{display:block;touch-action:none}#hint{position:fixed;left:8px;top:8px;background:#000a;color:#fff;padding:6px 9px;border-radius:8px;max-width:70vw}</style></head><body>
+<div id="hint">DEV demo with fake players (no server). Tap the floor to walk · tap a chair to sit · tap the ATM · tap a person.</div>
+<script src="../../vendor/three.min.js"></script>
+<script src="../avatar/avatar-options.js"></script><script src="../avatar/avatar-core.js"></script><script src="../avatar/avatar-body.js"></script><script src="../avatar/avatar-wear.js"></script><script src="../avatar/avatar-rig.js"></script><script src="../avatar/avatar-build.js"></script>
+<script src="live.js"></script><script src="interact.js"></script><script src="remotes.js"></script><script src="ui.js"></script><script src="mock-sb.js"></script>
+<script>
+/* This page is also the reference for wiring the live layer into the real world: copy the marked steps. */
+const T = THREE, FA = FutaAvatar, W = innerWidth, H = innerHeight, R = new T.WebGLRenderer({ antialias: true }); R.outputEncoding = T.sRGBEncoding; R.setSize(W, H); R.setPixelRatio(Math.min(2, devicePixelRatio)); document.body.appendChild(R.domElement);
+const scene = new T.Scene(); scene.background = new T.Color(0xb9c7d8); scene.add(new T.HemisphereLight(0xffffff, 0x8a8f99, .7)); const sun = new T.DirectionalLight(0xfff2dd, .6); sun.position.set(4, 8, 5); scene.add(sun);
+const cam = new T.PerspectiveCamera(48, W / H, .1, 200), M = (c) => new T.MeshLambertMaterial({ color: c });
+// ---- a small "library" interior (floor, wall, chairs, ATM). Real interiors come from the building data.
+const floor = new T.Mesh(new T.PlaneGeometry(12, 12), M(0xcdbfa7)); floor.rotation.x = -Math.PI / 2; floor.position.set(5, 0, 5); scene.add(floor);
+const box = (w, h, d, x, y, z, c) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), M(c)); m.position.set(x, y, z); scene.add(m); return m; };
+box(.4, 2.2, 8, 5, 1.1, 5, 0x8a93a3); const interior = { id: 'library', min: [-1, -1], max: [11, 11], cell: .5, blockers: [{ x: 5, z: 5, w: .4, d: 8 }], seats: [], atms: [{ id: 'atm1', x: 10.4, z: 9, face: -Math.PI / 2 }] };
+[[2, 8], [3.2, 8], [8, 3], [9.2, 3], [8, 8]].forEach(([x, z], i) => { box(.5, .45, .5, x, .225, z, 0x3d5a80); box(.5, .5, .08, x, .7, z - .25, 0x3d5a80); interior.seats.push({ id: 'chair' + i, x, z, face: 0 }); });
+box(.6, 1.7, .6, 10.4, .85, 9, 0x1f6b5c); box(.4, .3, .05, 10.1, 1.3, 9, 0x9ae7ff);
+// ---- STEP 1: the local player (hero LOD)
+const me = { id: 'me', username: 'you' }, mine = FA.create(FA.look.random('f', 5), { lod: 0, material: 'standard' }); mine.group.position.set(1, 0, 1); scene.add(mine.group);
+const state = { x: 1, z: 1, ry: 0, anim: 'idle', path: null, done: null };
+const player = { get pos() { return state; }, followPath(p, done) { state.path = p.slice(1); state.done = done; if (!state.path.length) { state.done(true); state.done = null; } }, face(r) { state.ry = r; }, setPose(n) { state.anim = n; mine.setPose(n); }, teleport(x, z) { state.x = x; state.z = z; state.path = null; } };
+// ---- STEP 2: connect. In the real game pass FutaApi.sb() as `sb` and the user from FutaApi.me().
+const sb = FutaMockSb.create(me.id, FA), live = FutaLive.create({ sb, me }), remotes = FutaRemotes.create({ scene, live }), ui = FutaLiveUI.mount(live, me), inter = FutaInteract.create({ live, player, toast: ui.note });
+inter.setInterior(interior); live.listenPersonal(); live.join('int_library_1').then(() => document.title += ' ✓');
+// ---- STEP 3: clicks → floor point / chair / ATM / person
+const ray = new T.Raycaster(), ndc = new T.Vector2();
+R.domElement.addEventListener('pointerdown', (e) => { ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, cam); const peer = remotes.pick(ray); if (peer) return ui.openCard(peer); const hit = ray.intersectObject(floor)[0]; if (hit) inter.handle(hit.point.x, hit.point.z); });
+window.__demo = { state, inter, live, sb, remotes, handle: (x, z) => inter.handle(x, z) };
+// ---- STEP 4: every frame
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (state.path && state.path.length) { const t = state.path[0], dx = t.x - state.x, dz = t.z - state.z, d = Math.hypot(dx, dz), step = 1.9 * dt; if (d <= step) { state.x = t.x; state.z = t.z; state.path.shift(); if (!state.path.length) { state.path = null; const f = state.done; state.done = null; f && f(true); } } else { state.x += dx / d * step; state.z += dz / d * step; state.ry = Math.atan2(dx, dz); } if (state.anim !== 'walk') { state.anim = 'walk'; mine.setPose('walk'); } }
+  else if (state.anim === 'walk') { state.anim = 'idle'; mine.setPose('idle'); }
+  mine.group.position.set(state.x, 0, state.z); mine.group.rotation.y = state.ry; mine.update(dt);
+  live.tick(state.x, 0, state.z, state.ry, state.anim === 'sit' ? 'idle' : state.anim, false);   // network (indoors: pass outdoors=false)
+  remotes.update(dt, state, cam);
+  cam.position.set(state.x + 6, 7.5, state.z + 8); cam.lookAt(state.x, .8, state.z); R.render(scene, cam); requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>

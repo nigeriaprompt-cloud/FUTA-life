@@ -1,0 +1,8 @@
+{
+  "_readme": "The 3 ways a new player can start their life in FUTA World. Edit freely; the UI is generated from this file. Stats are explained in docs/LIFE_LAYER.md.",
+  "starts": [
+    { "id": "fresh", "title": "Fresh Student", "blurb": "New in Akure. A bunk in the hostel, a small allowance, big dreams.", "cash": 15000, "energy": 100, "stats": { "style": 1, "hustle": 1, "social": 2 }, "room": "hostel_bunk" },
+    { "id": "hustler", "title": "Campus Hustler", "blurb": "You already know where the money is. Less cash, more side-gigs unlocked.", "cash": 6000, "energy": 90, "stats": { "style": 1, "hustle": 3, "social": 1 }, "room": "hostel_bunk" },
+    { "id": "creative", "title": "Fashion & Vibes", "blurb": "Fits first. Start with a wardrobe boost and a stylish corner of the room.", "cash": 9000, "energy": 100, "stats": { "style": 3, "hustle": 1, "social": 2 }, "room": "hostel_bunk" }
+  ]
+}
