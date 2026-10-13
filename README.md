@@ -2,6 +2,8 @@
 
 Standalone project: static front end (`public/`, deployed by Vercel, no build) + Supabase (accounts, database, realtime). Start with **`docs/SETUP_VERCEL_SUPABASE.md`** (owner's launch steps) and **`docs/SUPABASE.md`** (how it works). Put `.clinerules` in the project root for Cline.
 
+**Live:** https://futa-life-ten.vercel.app (GitHub: `nigeriaprompt-cloud/FUTA-life`; every push to `main` redeploys automatically. Site runs in demo mode until Supabase keys are set in `public/world/game/onboarding/config.js` — see `docs/SETUP_VERCEL_SUPABASE.md` §B.)
+
 | Path | What |
 |---|---|
 | `vercel.json`, `package.json` | hosting config (serve `public/`, no build) |
