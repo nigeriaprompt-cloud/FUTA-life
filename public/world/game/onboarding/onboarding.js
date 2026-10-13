@@ -10,7 +10,7 @@
   const C = window.FUTA_CONFIG, API = window.FutaApi;
   const $ = (s, r) => (r || document).querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const screen = $('#screen'), backBtn = $('#back'), stepsEl = $('#steps');
+  const screen = $('#screen'), backBtn = $('#back'), stepsEl = $('#steps'), signOutBtn = $('#signout');
   let user = null, history = [], cur = '', pending = {};
 
   /* ---------- helpers ---------- */
@@ -25,9 +25,21 @@
     S[name]();
   }
   backBtn.onclick = () => { const prev = history.pop(); if (prev) { cur = ''; go(prev, { replace: true }); history.pop && 0; backBtn.hidden = history.length === 0; } };
+  signOutBtn.onclick = function () { // header "Sign out" (visible only while signed in — route() toggles it)
+    if (signOutBtn.disabled) return;
+    signOutBtn.disabled = true; signOutBtn.textContent = 'Signing out…';
+    const reset = () => { signOutBtn.disabled = false; signOutBtn.textContent = 'Sign out'; };
+    API.signOut().then(() => {
+      reset(); signOutBtn.hidden = true;
+      user = null; pending = {}; history = [];
+      try { localStorage.removeItem('futa.avatar.draft.v1'); } catch (e) { }   // same key as creator.js DRAFT_KEY — the next account on this browser must not inherit this look
+      toast('Signed out.');
+      go('welcome', { replace: true });   // replace: no history, so Back can't return to a signed-out screen
+    }).catch(e => { reset(); toast(e.message); });
+  };
   function busy(btn, on, label) { btn.disabled = on; if (label) btn.dataset.l = btn.dataset.l || btn.textContent, btn.textContent = on ? label : btn.dataset.l; }
   function route(u) { // decide the first screen that is still unfinished (also resumes after a refresh)
-    user = u; history = [];
+    user = u; history = []; signOutBtn.hidden = !u;   // header "Sign out" only while a session exists
     if (!u) return go('welcome');
     if (!u.username || !u.dob) return go('profile', { replace: true });
     if (!u.avatar) return go('look', { replace: true });

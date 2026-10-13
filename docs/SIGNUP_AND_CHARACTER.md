@@ -18,6 +18,8 @@
 
 Resume rule (`route()` in `onboarding.js`): after login the player lands on the first unfinished screen (no username → profile, no avatar → look, no life → life, else final).
 
+Sign-out: the page header shows a **Sign out** button whenever a session exists (profile → final screens; hidden on welcome/account). It calls `API.signOut()` (Supabase `auth.signOut()`), clears the local avatar draft so the next account on this browser starts clean, and returns to `welcome` with the flow history reset. Signing out from inside `/world` comes later with the phone's **Settings** app (`GAME_DESIGN.md` §5).
+
 ## 2. Files (all small, all plain JS/CSS, no build step)
 ```
 public/world/game/onboarding/

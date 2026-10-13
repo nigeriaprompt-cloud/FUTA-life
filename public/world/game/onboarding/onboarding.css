@@ -8,6 +8,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .brand{display:flex;align-items:center;gap:8px;font-size:15px;letter-spacing:.02em;flex:1}.brand .dot{width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 0 14px var(--gold2)}
 .back{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:22px;line-height:1}
 .steps{display:flex;gap:6px;list-style:none;margin:0;padding:0}.steps li{width:22px;height:5px;border-radius:3px;background:var(--line)}.steps li.on{background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.signout{border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:999px;padding:7px 13px;font-size:13px;line-height:1;white-space:nowrap}.signout:hover{color:var(--text);border-color:var(--gold)}.signout:disabled{opacity:.5;cursor:not-allowed}
 #screen{flex:1;display:flex;flex-direction:column;animation:in .28s ease}
 @keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 h1{font-size:clamp(26px,6vw,40px);line-height:1.1;margin:.2em 0 .3em;letter-spacing:-.01em}h2{font-size:22px;margin:.2em 0}
