@@ -9,7 +9,17 @@ You need: a GitHub account, a Supabase account, a Vercel account, and (for "Cont
 4. **Project Settings → API**: copy the **Project URL** and the **anon / publishable** key. (Never copy the `service_role` / secret key anywhere in this project.)
 5. **Authentication → Providers → Email**: keep it ON. Keep **Confirm email** ON (stops fake accounts).
 6. **Authentication → URL Configuration**: set **Site URL** to your Vercel address (step C; you can come back and fill this). Add the same address, and `http://localhost:8000`, under **Redirect URLs**.
-7. **Google login** (optional but recommended): Google Cloud Console → create a project → *APIs & Services → OAuth consent screen* (External) → *Credentials → Create OAuth client ID → Web application*. Under **Authorized redirect URIs** paste the callback URL shown in Supabase at *Authentication → Providers → Google* (looks like `https://xxxx.supabase.co/auth/v1/callback`). Copy the Client ID and Client Secret into that Supabase Google page and switch it ON. **Test it with a real Google account before you tell anyone** — it has not been tested against real Google yet.
+7. **Google login** — the exact clicks (15 minutes; a Google account is required):
+   1. [console.cloud.google.com](https://console.cloud.google.com) → **New project** (name it `futa-world`, e.g.) → **Select project**.
+   2. **APIs & Services → OAuth consent screen**: User type **External** → fill *App name* + your email → **Save and continue** through Scopes (keep the defaults: email, profile, openid) and Test users. On the last page press **Back to dashboard**. While the consent screen says **Testing**, only the Google accounts you add under **Test users** may sign in — that is enough for you to test. Before opening to the public, press **Publish app**.
+   3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+      - *Application type*: **Web application**
+      - *Authorized JavaScript origins*: `https://futalife.vercel.app` (plus `http://localhost:8000` if you also test locally)
+      - *Authorized redirect URIs*: `https://bkebwdpfvafidhazhsan.supabase.co/auth/v1/callback` — this exact value is shown on the Supabase Google provider page as **Callback URL**; never invent one.
+      - **Create** → copy the **Client ID** and **Client Secret** (the Secret is shown only once — if you lose it, create a new secret).
+   4. Supabase → **Authentication → Providers → Google**: turn the provider **ON**, paste the Client ID into **Client IDs** and the Client Secret into **Client Secret (for OAuth)**, leave *Skip nonce checks* and *Allow users without an email* **off**, **Save**.
+   5. Supabase → **Authentication → URL Configuration**: **Site URL** = `https://futalife.vercel.app/`; under **Redirect URLs** add `https://futalife.vercel.app/**` (and `http://localhost:8000/**` for local testing). Google sign-in bounces back through this list — if it is missing, the login fails after Google with a redirect error.
+   6. Test with a real Google account that is listed under *Test users*: sign out, then **Continue with Google** on the site. If Google says "access blocked", the account is not on the test-user list (or the app was never published). **It has not been tested against real Google until you do this.**
 8. **Realtime**: nothing to switch on; the SQL already does it. (Authentication → *Realtime settings* → leave "Allow public access" OFF; players must be signed in.)
 
 ## B. Put your keys into the project
