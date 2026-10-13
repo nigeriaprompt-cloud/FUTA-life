@@ -6,8 +6,8 @@ window.FUTA_CONFIG = {
   // true  = everything runs in the browser (fake accounts in localStorage) so you can preview the whole flow.
   // false = real Supabase (accounts, database, realtime). Fill the two values below first. See docs/SUPABASE.md.
   demo: false,
-  supabaseUrl: 'https://futalife.vercel.app/',        // e.g. https://abcdxyz.supabase.co   (Project Settings > API)
-  supabaseAnonKey: 'sb_publishable_WpmW5IjKBeNaq-QhX5CGzQ_9qjbgo_p',    // the PUBLIC "anon" / publishable key. NEVER put the service_role key in this repo.
+  supabaseUrl: 'https://bkebwdpfvafidhazhsan.supabase.co',        // e.g. https://abcdxyz.supabase.co   (Project Settings > API)
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJrZWJ3ZHBmdmFmaWRoYXpoc2FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MjkwOTksImV4cCI6MjEwNzQwNTA5OX0.xqJx5aA51xGmLlWhpPwpibFFyJKouAQuAz9iJeRXIyw',    // the PUBLIC "anon" / publishable key. NEVER put the service_role key in this repo.
   // Google sign-in is switched on inside Supabase (Authentication > Providers > Google), not here.
   // where to send the player after the character is saved
   afterUrl: '/world/',
