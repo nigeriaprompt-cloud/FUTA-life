@@ -22,7 +22,7 @@ supabaseAnonKey: 'eyJ…your anon key…',
 The anon key is *meant* to be public; the database rules (RLS) are what protect your data.
 
 ## C. Vercel (hosting)
-> **Already done for this repo (2026-10-13):** the project lives at `github.com/nigeriaprompt-cloud/FUTA-life` (old files preserved on the `backup-old-files` branch) and the Vercel project **https://futa-life-ten.vercel.app** is connected to it — every push to `main` redeploys automatically. The steps below explain how it was set up and what to do for a new environment.
+> **Already done for this repo (2026-10-13):** the project lives at `github.com/nigeriaprompt-cloud/FUTA-life` (old files preserved on the `backup-old-files` branch) and the Vercel project **https://futalife.vercel.app** is connected to it — every push to `main` redeploys automatically. The steps below explain how it was set up and what to do for a new environment.
 
 1. Put this folder in a new **GitHub** repository (private is fine).
 2. vercel.com → **Add New → Project** → import the repo → **Framework: Other** → leave build settings empty (`vercel.json` already says *no build, serve the `public` folder*) → **Deploy**.

@@ -5,10 +5,10 @@
   "installCommand": null,
   "outputDirectory": "public",
   "cleanUrls": true,
-  "trailingSlash": false,
   "redirects": [
     { "source": "/", "destination": "/world/game/onboarding/signup", "permanent": false },
-    { "source": "/join", "destination": "/world/game/onboarding/signup", "permanent": false }
+    { "source": "/join", "destination": "/world/game/onboarding/signup", "permanent": false },
+    { "source": "/world", "destination": "/world/", "permanent": false }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [
