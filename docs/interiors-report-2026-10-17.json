@@ -1,0 +1,597 @@
+{
+ "hostel": {
+  "errors": [
+   "seat walled in (1.03 m short): sofa#23:0",
+   "seat walled in (1.41 m short): sofa#23:1",
+   "seat walled in (1.14 m short): sofa#23:2",
+   "use-spot of bunk#0 is inside furniture (1.96,2.00) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of bunk#1 is inside furniture (1.96,3.30) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of bucket#20 is inside furniture (11.01,8.40) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 29,
+   "interactive": 18,
+   "seats": 7,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 7126,
+   "meshes": 51
+  },
+  "pageErrors": []
+ },
+ "bank": {
+  "errors": [
+   "seat walled in (1.07 m short): sofa#13:0",
+   "seat walled in (1.13 m short): sofa#13:1",
+   "seat walled in (1.04 m short): sofa#13:2",
+   "seat walled in (0.91 m short): sofa#14:0",
+   "seat walled in (1.17 m short): sofa#14:2",
+   "use-spot of atm#8 is inside furniture (12.76,5.00) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 2,
+   "pieces": 25,
+   "interactive": 6,
+   "seats": 8,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 8,
+   "tris": 5866,
+   "meshes": 34
+  },
+  "pageErrors": []
+ },
+ "pharmacy": {
+  "errors": [
+   "outside room: bench#18 at 9.73,6.80",
+   "overlap: gondola#14 / dispenser#20 (0.19×0.24 m)",
+   "overlap: gondola#14 / lamp#23 (0.34×0.40 m)",
+   "overlap: bench#18 / plant#21 (0.24×0.50 m)",
+   "overlap: dispenser#20 / lamp#23 (0.25×0.14 m)",
+   "seat walled in (1.12 m short): bench#18:2",
+   "use-spot of gondola#13 is inside furniture (4.05,5.20) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of dispenser#20 is inside furniture (0.60,6.61) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 27,
+   "interactive": 7,
+   "seats": 3,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 4,
+   "tris": 12520,
+   "meshes": 32
+  },
+  "pageErrors": []
+ },
+ "provisions": {
+  "errors": [
+   "overlap: wallshelf#1 / freezer#2 (0.30×0.45 m)",
+   "overlap: freezer#2 / dispenser#12 (0.40×0.40 m)",
+   "overlap: gondola#7 / crate#11 (0.24×0.20 m)",
+   "use-spot of freezer#2 is inside furniture (6.50,1.34) — move neighbours or pass {spot:[x,z,face]}",
+   "npc student stands inside furniture at 2,3.4"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 16,
+   "interactive": 4,
+   "seats": 0,
+   "windows": 3,
+   "lights": 4,
+   "npcGroups": 3,
+   "tris": 8816,
+   "meshes": 28
+  },
+  "pageErrors": []
+ },
+ "supermarket": {
+  "errors": [],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 42,
+   "interactive": 18,
+   "seats": 0,
+   "windows": 4,
+   "lights": 12,
+   "npcGroups": 5,
+   "tris": 29918,
+   "meshes": 56
+  },
+  "pageErrors": []
+ },
+ "bookshop": {
+  "errors": [
+   "outside room: noticeboard#23 at 9.94,8.00",
+   "overlap: bookrack#7 / plant#14 (0.29×0.50 m)",
+   "seat walled in (1.03 m short): armchair#17:0",
+   "use-spot of bookrack#6 is inside furniture (8.91,5.60) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 24,
+   "interactive": 14,
+   "seats": 2,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 4,
+   "tris": 10892,
+   "meshes": 37
+  },
+  "pageErrors": []
+ },
+ "phone_shop": {
+  "errors": [
+   "overlap: wallshelf#2 / cabinet#3 (0.20×0.45 m)",
+   "overlap: counter#4 / pcdesk#12 (0.60×0.70 m)",
+   "overlap: gondola_phone#10 / plant#14 (0.39×0.15 m)",
+   "unreachable seat bench#11:0",
+   "unreachable seat bench#11:1"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 18,
+   "interactive": 5,
+   "seats": 3,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 5986,
+   "meshes": 37
+  },
+  "pageErrors": []
+ },
+ "print_shop": {
+  "errors": [
+   "outside room: chair#11 at 2.70,6.00",
+   "overlap: wallshelf#1 / cabinet#2 (0.10×0.45 m)",
+   "overlap: counter#5 / printer#12 (0.25×0.15 m)",
+   "seat walled in (1.74 m short): chair#11:0",
+   "use-spot of printer#12 is inside furniture (6.45,4.20) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 21,
+   "interactive": 4,
+   "seats": 3,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 4,
+   "tris": 6106,
+   "meshes": 30
+  },
+  "pageErrors": []
+ },
+ "cyber_cafe": {
+  "errors": [
+   "unreachable seat pcdesk#0:0",
+   "unreachable seat pcdesk#1:0",
+   "unreachable seat pcdesk#2:0",
+   "unreachable seat pcdesk#3:0",
+   "unreachable seat pcdesk#4:0",
+   "unreachable seat pcdesk#5:0",
+   "unreachable seat pcdesk#6:0",
+   "unreachable seat pcdesk#7:0",
+   "unreachable seat pcdesk#8:0",
+   "unreachable seat pcdesk#9:0",
+   "seat walled in (0.93 m short): pcdesk#10:0",
+   "unreachable seat chair#16:0",
+   "seat walled in (0.93 m short): sofa#20:0",
+   "seat walled in (1.15 m short): sofa#20:1",
+   "unreachable seat sofa#20:2",
+   "unreachable: use-spot of pcdesk#0",
+   "unreachable: use-spot of pcdesk#1",
+   "unreachable: use-spot of pcdesk#2",
+   "unreachable: use-spot of pcdesk#3",
+   "unreachable: use-spot of pcdesk#4",
+   "unreachable: use-spot of pcdesk#5",
+   "unreachable: use-spot of pcdesk#6",
+   "unreachable: use-spot of pcdesk#7",
+   "unreachable: use-spot of pcdesk#8",
+   "unreachable: use-spot of pcdesk#9",
+   "unreachable: use-spot of printer#14",
+   "unreachable: use-spot of dispenser#18"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 28,
+   "interactive": 18,
+   "seats": 18,
+   "windows": 3,
+   "lights": 8,
+   "npcGroups": 4,
+   "tris": 6790,
+   "meshes": 59
+  },
+  "pageErrors": []
+ },
+ "bakery": {
+  "errors": [
+   "npc cook stands inside furniture at 6,0.9"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 21,
+   "interactive": 4,
+   "seats": 4,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 7798,
+   "meshes": 29
+  },
+  "pageErrors": []
+ },
+ "restaurant": {
+  "errors": [
+   "seat walled in (1.09 m short): dining#6:2",
+   "seat walled in (1.09 m short): dining#6:3",
+   "seat walled in (1.40 m short): dining#7:2",
+   "seat walled in (1.12 m short): dining#7:3",
+   "seat walled in (1.36 m short): dining#8:2",
+   "seat walled in (1.33 m short): dining#8:3",
+   "seat walled in (1.15 m short): dining#9:0",
+   "seat walled in (1.15 m short): dining#9:1",
+   "seat walled in (1.09 m short): dining#9:2",
+   "seat walled in (1.09 m short): dining#9:3",
+   "seat walled in (1.46 m short): dining#10:0",
+   "seat walled in (1.18 m short): dining#10:1",
+   "seat walled in (1.40 m short): dining#10:2",
+   "seat walled in (1.12 m short): dining#10:3",
+   "seat walled in (1.43 m short): dining#11:0",
+   "seat walled in (1.40 m short): dining#11:1",
+   "seat walled in (1.36 m short): dining#11:2",
+   "seat walled in (1.33 m short): dining#11:3",
+   "npc cook stands inside furniture at 1.6,1",
+   "npc cook stands inside furniture at 3.3,1"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 20,
+   "interactive": 12,
+   "seats": 24,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 7492,
+   "meshes": 42
+  },
+  "pageErrors": []
+ },
+ "salon": {
+  "errors": [
+   "overlap: wallshelf#15 / plant#21 (0.24×0.15 m)",
+   "unreachable seat salonchair#1:0",
+   "unreachable seat salonchair#3:0",
+   "unreachable seat salonchair#5:0",
+   "unreachable seat salonchair#7:0",
+   "unreachable seat washbasin#9:0",
+   "seat walled in (1.18 m short): washbasin#10:0",
+   "unreachable seat dryer#11:0",
+   "unreachable seat dryer#12:0",
+   "unreachable seat sofa#17:0",
+   "unreachable seat sofa#17:1",
+   "unreachable seat sofa#17:2",
+   "unreachable: use-spot of washbasin#9",
+   "unreachable: use-spot of tvunit#19"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 27,
+   "interactive": 12,
+   "seats": 11,
+   "windows": 3,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 7422,
+   "meshes": 43
+  },
+  "pageErrors": []
+ },
+ "petrol_shop": {
+  "errors": [
+   "use-spot of gondola#7 is inside furniture (1.06,3.80) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 17,
+   "interactive": 4,
+   "seats": 0,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 4,
+   "tris": 8990,
+   "meshes": 31
+  },
+  "pageErrors": []
+ },
+ "carwash": {
+  "errors": [
+   "overlap: sofa#6 / plant#19 (0.15×0.10 m)",
+   "overlap: vending#11 / tyres#15 (0.44×0.65 m)",
+   "seat walled in (1.04 m short): sofa#6:0",
+   "seat walled in (1.10 m short): sofa#6:1",
+   "seat walled in (1.07 m short): sofa#6:2",
+   "seat walled in (1.15 m short): armchair#7:0",
+   "use-spot of vending#11 is inside furniture (7.66,5.80) — move neighbours or pass {spot:[x,z,face]}",
+   "npc trader stands inside furniture at 6.2,1"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 24,
+   "interactive": 7,
+   "seats": 6,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 5906,
+   "meshes": 35
+  },
+  "pageErrors": []
+ },
+ "health_centre": {
+  "errors": [
+   "overlap: sofa#26 / sofa#27 (0.90×0.10 m)",
+   "seat walled in (1.07 m short): sofa#26:0",
+   "seat walled in (1.17 m short): sofa#26:1",
+   "seat walled in (1.17 m short): sofa#27:0",
+   "seat walled in (1.11 m short): sofa#27:1",
+   "seat walled in (1.04 m short): sofa#27:2",
+   "seat walled in (1.00 m short): armchair#29:0",
+   "seat walled in (1.14 m short): armchair#30:0",
+   "use-spot of dispenser#24 is inside furniture (13.15,9.80) — move neighbours or pass {spot:[x,z,face]}",
+   "npc security stands inside furniture at 5.7,9.3",
+   "npc staff stands inside furniture at 8.9,4.45"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 45,
+   "interactive": 8,
+   "seats": 11,
+   "windows": 5,
+   "lights": 6,
+   "npcGroups": 10,
+   "tris": 10586,
+   "meshes": 41
+  },
+  "pageErrors": []
+ },
+ "clinic": {
+  "errors": [
+   "seat walled in (1.04 m short): sofa#15:0",
+   "seat walled in (1.14 m short): sofa#15:1",
+   "seat walled in (1.07 m short): sofa#15:2",
+   "use-spot of dispenser#19 is inside furniture (9.15,6.80) — move neighbours or pass {spot:[x,z,face]}",
+   "npc nurse stands inside furniture at 7.2,4"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 27,
+   "interactive": 4,
+   "seats": 8,
+   "windows": 4,
+   "lights": 4,
+   "npcGroups": 5,
+   "tris": 5818,
+   "meshes": 30
+  },
+  "pageErrors": []
+ },
+ "church": {
+  "errors": [
+   "overlap: cr_flowers#7 / chair#16 (0.45×0.50 m)",
+   "unreachable seat chair#18:0",
+   "seat walled in (1.14 m short): cr_pew#20:0",
+   "seat walled in (1.11 m short): cr_pew#20:1",
+   "seat walled in (1.07 m short): cr_pew#20:2",
+   "seat walled in (1.21 m short): cr_pew#20:3",
+   "seat walled in (1.17 m short): cr_pew#20:4",
+   "seat walled in (1.14 m short): cr_pew#20:5",
+   "seat walled in (1.14 m short): cr_pew#21:0",
+   "seat walled in (1.10 m short): cr_pew#21:1",
+   "seat walled in (1.07 m short): cr_pew#21:2",
+   "seat walled in (1.21 m short): cr_pew#21:3",
+   "seat walled in (1.17 m short): cr_pew#21:4",
+   "seat walled in (1.14 m short): cr_pew#21:5",
+   "seat walled in (1.10 m short): cr_pew#22:0",
+   "seat walled in (1.84 m short): cr_pew#22:1",
+   "seat walled in (2.58 m short): cr_pew#22:2",
+   "seat walled in (2.58 m short): cr_pew#22:3",
+   "seat walled in (1.84 m short): cr_pew#22:4",
+   "seat walled in (1.10 m short): cr_pew#22:5",
+   "seat walled in (1.10 m short): cr_pew#23:0",
+   "seat walled in (1.84 m short): cr_pew#23:1",
+   "seat walled in (2.58 m short): cr_pew#23:2",
+   "seat walled in (2.58 m short): cr_pew#23:3",
+   "seat walled in (1.84 m short): cr_pew#23:4",
+   "seat walled in (1.10 m short): cr_pew#23:5",
+   "seat walled in (1.06 m short): cr_pew#24:0",
+   "seat walled in (1.81 m short): cr_pew#24:1",
+   "seat walled in (2.55 m short): cr_pew#24:2",
+   "seat walled in (2.55 m short): cr_pew#24:3",
+   "seat walled in (1.81 m short): cr_pew#24:4",
+   "seat walled in (1.06 m short): cr_pew#24:5",
+   "seat walled in (1.06 m short): cr_pew#25:0",
+   "seat walled in (1.81 m short): cr_pew#25:1",
+   "seat walled in (2.55 m short): cr_pew#25:2",
+   "seat walled in (2.55 m short): cr_pew#25:3",
+   "seat walled in (1.81 m short): cr_pew#25:4",
+   "seat walled in (1.06 m short): cr_pew#25:5",
+   "seat walled in (1.03 m short): cr_pew#26:0",
+   "seat walled in (1.77 m short): cr_pew#26:1",
+   "seat walled in (2.52 m short): cr_pew#26:2",
+   "seat walled in (2.52 m short): cr_pew#26:3",
+   "seat walled in (1.77 m short): cr_pew#26:4",
+   "seat walled in (1.03 m short): cr_pew#26:5",
+   "seat walled in (1.03 m short): cr_pew#27:0",
+   "seat walled in (1.77 m short): cr_pew#27:1",
+   "seat walled in (2.52 m short): cr_pew#27:2",
+   "seat walled in (2.52 m short): cr_pew#27:3",
+   "seat walled in (1.77 m short): cr_pew#27:4",
+   "seat walled in (1.03 m short): cr_pew#27:5",
+   "seat walled in (1.00 m short): cr_pew#28:0",
+   "seat walled in (1.10 m short): cr_pew#28:1",
+   "seat walled in (1.07 m short): cr_pew#28:2",
+   "seat walled in (1.20 m short): cr_pew#28:3",
+   "seat walled in (1.16 m short): cr_pew#28:4",
+   "seat walled in (1.00 m short): cr_pew#28:5",
+   "seat walled in (1.00 m short): cr_pew#29:0",
+   "seat walled in (1.10 m short): cr_pew#29:1",
+   "seat walled in (1.07 m short): cr_pew#29:2",
+   "seat walled in (1.20 m short): cr_pew#29:3",
+   "seat walled in (1.16 m short): cr_pew#29:4",
+   "seat walled in (1.00 m short): cr_pew#29:5",
+   "npc pastor stands inside furniture at 3.6,0.55",
+   "npc staff stands inside furniture at 6.2,10.3",
+   "npc staff stands inside furniture at 8.8,10.3"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 47,
+   "interactive": 17,
+   "seats": 65,
+   "windows": 6,
+   "lights": 9,
+   "npcGroups": 6,
+   "tris": 12006,
+   "meshes": 50
+  },
+  "pageErrors": []
+ },
+ "mosque": {
+  "errors": [
+   "overlap: shelf#30 / plant#31 (0.14×0.25 m)",
+   "unreachable seat stool#28:0"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 35,
+   "interactive": 7,
+   "seats": 2,
+   "windows": 6,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 13042,
+   "meshes": 36
+  },
+  "pageErrors": []
+ },
+ "gym": {
+  "errors": [
+   "overlap: dumbbells#10 / cr_kettlebells#11 (0.55×0.10 m)",
+   "overlap: cr_kettlebells#11 / bucket#20 (0.24×0.50 m)",
+   "overlap: counter#21 / fridge#23 (0.25×0.15 m)",
+   "use-spot of treadmill#2 is inside furniture (1.20,2.05) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of treadmill#3 is inside furniture (2.40,2.05) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of treadmill#4 is inside furniture (3.60,2.05) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of treadmill#5 is inside furniture (4.80,2.05) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of weightbench#8 is inside furniture (10.40,4.90) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of punchbag#16 is inside furniture (0.80,9.80) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of punchbag#17 is inside furniture (2.20,9.80) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of bucket#20 is inside furniture (13.40,10.00) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of mirror#25 is inside furniture (13.40,7.20) — move neighbours or pass {spot:[x,z,face]}"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 31,
+   "interactive": 16,
+   "seats": 1,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 6,
+   "tris": 6966,
+   "meshes": 47
+  },
+  "pageErrors": []
+ },
+ "sports_room": {
+  "errors": [
+   "seat walled in (1.06 m short): chair#4:0",
+   "seat walled in (1.13 m short): chair#5:0",
+   "seat walled in (1.00 m short): chair#10:0",
+   "seat walled in (1.06 m short): chair#11:0",
+   "use-spot of dispenser#20 is inside furniture (14.15,1.40) — move neighbours or pass {spot:[x,z,face]}",
+   "npc student stands inside furniture at 10.4,4.2"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 32,
+   "interactive": 12,
+   "seats": 12,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 5,
+   "tris": 8472,
+   "meshes": 39
+  },
+  "pageErrors": []
+ },
+ "workshop": {
+  "errors": [
+   "use-spot of crate#9 is inside furniture (1.00,8.00) — move neighbours or pass {spot:[x,z,face]}",
+   "use-spot of crate#10 is inside furniture (1.00,9.00) — move neighbours or pass {spot:[x,z,face]}",
+   "npc staff stands inside furniture at 11,2.3",
+   "npc student stands inside furniture at 7.5,5.6"
+  ],
+  "warnings": [],
+  "stats": {
+   "atms": 0,
+   "pieces": 25,
+   "interactive": 6,
+   "seats": 2,
+   "windows": 4,
+   "lights": 6,
+   "npcGroups": 4,
+   "tris": 9834,
+   "meshes": 34
+  },
+  "pageErrors": []
+ },
+ "visitor_centre": {
+  "errors": [
+   "overlap: counter#0 / printer#2 (0.65×0.55 m)",
+   "overlap: cr_aquarium#9 / plant#26 (0.24×0.50 m)",
+   "seat walled in (1.13 m short): bench#21:1",
+   "seat walled in (1.10 m short): bench#21:2"
+  ],
+  "warnings": [
+   "security NPC but security:false",
+   "few interactive objects: 2"
+  ],
+  "stats": {
+   "atms": 0,
+   "pieces": 31,
+   "interactive": 2,
+   "seats": 4,
+   "windows": 5,
+   "lights": 6,
+   "npcGroups": 7,
+   "tris": 11058,
+   "meshes": 32
+  },
+  "pageErrors": []
+ }
+}

@@ -1,0 +1,145 @@
+{
+  "_readme": "SOURCE OF TRUTH for every choice in the character creator and for the server validator. Edit this file, then run: python3 tools/build-options.py . Never edit avatar-options.js by hand.",
+  "version": 1,
+  "palettes": {
+    "skin":   ["#f3d9c4","#e8be9c","#d9a577","#c68a5b","#b0714a","#9a5c3a","#80472b","#693822","#552b1b","#43210f","#3a1a10","#2c120a"],
+    "hair":   ["#0d0b0a","#1c1411","#3a2417","#5a3a22","#8b5e34","#b5651d","#c9a15a","#7a1f1f","#1d3a8a","#8b2fc9","#d63384","#bfbfbf"],
+    "eye":    ["#3a2212","#5a3a1c","#2d4a3a","#4a7a4f","#8a6a2a","#4a78a8","#7c8794","#1a1210"],
+    "lip":    ["#a45a50","#b5483f","#c43b4f","#8a2236","#d46a7a","#6b2a3a","#e07b5a","#4a1f2a"],
+    "shadow": ["#7a5a48","#a0522d","#c8a2c8","#2f4f6f","#d4a017","#3b6b4a","#8b3a62","#222222"],
+    "blush":  ["#e8806a","#d46a6a","#c9604a","#e59a8a","#b85050","#d98a6a"],
+    "nail":   ["#c3002f","#f4a7b9","#111111","#ffffff","#7b2cbf","#d4af37","#1e90ff","#2e8b57","#e8c4a8"],
+    "cloth":  ["#f4f1ea","#1b1b1f","#2c3e63","#7a8aa0","#b02a2a","#e08a2e","#e5c04a","#3d8a4c","#1f6b5c","#2f8fb5","#6b3fa0","#d6568a","#8a5a3c","#d9c3a0","#555a60","#c5c9cf","#0f2b5b","#8c1c3a","#f2a0b4","#8fc9a8","#ff6a3d","#2a2a72","#a3d65c","#5c3a28"]
+  },
+  "patterns": ["flat","fabric","stripes","pinstripe","plaid","dots","ankara_a","ankara_b","kente","floral","denim","knit","diagonal"],
+  "body": {
+    "frame": ["m","f"],
+    "height": {"min": 0.92, "max": 1.08, "default": 1.0},
+    "build": {"min": 0, "max": 1, "default": 0.5},
+    "bust": {"min": 0, "max": 1, "default": 0.5},
+    "hips": {"min": 0, "max": 1, "default": 0.5},
+    "shoulders": {"min": 0, "max": 1, "default": 0.5}
+  },
+  "face": {
+    "shape": {"count": 6, "labels": ["Soft oval","Round","Heart","Square","Long","Balanced"]},
+    "eyes": {"count": 6, "labels": ["Classic","Big","Narrow","Wide-set","Close-set","Gentle"]},
+    "eyeColor": {"count": 8},
+    "brows": {"count": 5, "labels": ["Natural","Bold","Thin arched","Straight","Strong arch"]},
+    "nose": {"count": 5, "labels": ["Classic","Broad","Slim","Button","Strong"]},
+    "lips": {"count": 5, "labels": ["Classic","Full","Slim","Wide","Heart"]}
+  },
+  "makeup": {"lips": {"count": 8, "optional": true}, "shadow": {"count": 8, "optional": true}, "blush": {"count": 6, "optional": true}, "liner": {"type": "bool"}, "lashes": {"type": "bool"}},
+  "nails": {"count": 9, "optional": true},
+  "hair": {
+    "styles": [
+      {"id":"bald","label":"Bald","for":"u"},
+      {"id":"buzz","label":"Buzz cut","for":"m"},
+      {"id":"fade","label":"Low fade","for":"m"},
+      {"id":"afro","label":"Afro","for":"u"},
+      {"id":"twists","label":"Twist coils","for":"u"},
+      {"id":"cornrows","label":"Cornrows","for":"u"},
+      {"id":"box_braids","label":"Box braids","for":"f"},
+      {"id":"locs","label":"Locs","for":"u"},
+      {"id":"bun","label":"Top bun","for":"u"},
+      {"id":"ponytail","label":"Ponytail","for":"f"},
+      {"id":"long_straight","label":"Long straight","for":"f"},
+      {"id":"bob","label":"Bob","for":"f"},
+      {"id":"puffs","label":"Two puffs","for":"f"},
+      {"id":"braid_updo","label":"Braided updo","for":"f"}
+    ],
+    "color": {"count": 12}
+  },
+  "beard": {"styles": [{"id":"none","label":"None"},{"id":"stubble","label":"Stubble"},{"id":"mustache","label":"Moustache"},{"id":"goatee","label":"Goatee"},{"id":"full","label":"Full beard"}]},
+  "wear": {
+    "top": [
+      {"id":"tee","label":"T-shirt","for":"u","pat":true},
+      {"id":"tank","label":"Tank top","for":"u","pat":true},
+      {"id":"polo","label":"Polo","for":"m","pat":true},
+      {"id":"shirt","label":"Button shirt","for":"u","pat":true},
+      {"id":"hoodie","label":"Hoodie","for":"u","pat":false},
+      {"id":"knit","label":"Knit sweater","for":"u","pat":false},
+      {"id":"blouse","label":"Blouse","for":"f","pat":true},
+      {"id":"croptop","label":"Crop top","for":"f","pat":true},
+      {"id":"kaftan","label":"Kaftan","for":"m","pat":true},
+      {"id":"buba","label":"Buba","for":"f","pat":true},
+      {"id":"uniform_shirt","label":"Uniform shirt","for":"u","restricted":true,"pat":false}
+    ],
+    "layer": [
+      {"id":"jacket","label":"Bomber jacket","for":"u"},
+      {"id":"blazer","label":"Blazer","for":"u"},
+      {"id":"cardigan","label":"Cardigan","for":"u"},
+      {"id":"hivis","label":"Hi-vis vest","for":"u","restricted":true},
+      {"id":"labcoat","label":"Lab coat","for":"u","restricted":true}
+    ],
+    "bottom": [
+      {"id":"jeans","label":"Jeans","for":"u","pat":false},
+      {"id":"chino","label":"Chinos","for":"m","pat":false},
+      {"id":"slacks","label":"Slacks","for":"u","pat":true},
+      {"id":"shorts","label":"Shorts","for":"u","pat":true},
+      {"id":"joggers","label":"Joggers","for":"u","pat":false},
+      {"id":"sokoto","label":"Sokoto","for":"m","pat":true},
+      {"id":"mini","label":"Mini skirt","for":"f","pat":true},
+      {"id":"skirt","label":"Knee skirt","for":"f","pat":true},
+      {"id":"midi","label":"Long skirt","for":"f","pat":true},
+      {"id":"wrapper","label":"Wrapper","for":"f","pat":true},
+      {"id":"leggings","label":"Leggings","for":"f","pat":false}
+    ],
+    "dress": [
+      {"id":"none","label":"No dress","for":"u"},
+      {"id":"sundress","label":"Sundress","for":"f","pat":true},
+      {"id":"bodycon","label":"Body-con dress","for":"f","pat":true},
+      {"id":"maxi","label":"Maxi dress","for":"f","pat":true},
+      {"id":"gown","label":"Ankara gown","for":"f","pat":true},
+      {"id":"abaya","label":"Abaya","for":"f","pat":false}
+    ],
+    "shoes": [
+      {"id":"sneakers","label":"Sneakers","for":"u"},
+      {"id":"loafers","label":"Loafers","for":"u"},
+      {"id":"boots","label":"Boots","for":"u"},
+      {"id":"sandals","label":"Sandals","for":"u"},
+      {"id":"heels","label":"Heels","for":"f"}
+    ],
+    "head": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"cap","label":"Cap","for":"u"},
+      {"id":"beanie","label":"Beanie","for":"u"},
+      {"id":"durag","label":"Durag","for":"u"},
+      {"id":"gele","label":"Gele","for":"f","pat":true},
+      {"id":"hijab","label":"Hijab","for":"f"},
+      {"id":"peaked","label":"Peaked cap","for":"u","restricted":true}
+    ],
+    "glasses": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"round","label":"Round","for":"u"},
+      {"id":"square","label":"Square","for":"u"},
+      {"id":"shades","label":"Sunglasses","for":"u"}
+    ],
+    "bag": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"backpack","label":"Backpack","for":"u"},
+      {"id":"sling","label":"Sling bag","for":"u"},
+      {"id":"handbag","label":"Handbag","for":"f"}
+    ],
+    "neck": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"chain","label":"Gold chain","for":"u"},
+      {"id":"tie","label":"Tie","for":"m"},
+      {"id":"lanyard","label":"ID lanyard","for":"u"},
+      {"id":"scarf","label":"Scarf","for":"u"}
+    ],
+    "wrist": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"watch","label":"Watch","for":"u"},
+      {"id":"bangles","label":"Bangles","for":"f"}
+    ],
+    "ears": [
+      {"id":"none","label":"None","for":"u"},
+      {"id":"studs","label":"Studs","for":"u"},
+      {"id":"hoops","label":"Hoops","for":"f"}
+    ]
+  },
+  "defaults": {
+    "m": {"top":{"id":"tee","c":0},"bottom":{"id":"jeans","c":2},"shoes":{"id":"sneakers","c":1,"c2":0}},
+    "f": {"top":{"id":"blouse","c":11},"bottom":{"id":"jeans","c":16},"shoes":{"id":"sneakers","c":0,"c2":0}}
+  }
+}

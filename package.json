@@ -1,0 +1,2 @@
+{ "name": "futa-world", "private": true, "version": "0.2.0", "description": "FUTAlife — static front end on Vercel, Supabase backend. No build step.",
+  "scripts": { "serve": "cd public && python3 -m http.server 8000", "options": "python3 tools/build-options.py", "test:sql": "sh supabase/tests/run.sh", "test:live": "node tools/test/live.test.js", "test:parity": "node tools/test/parity.js" } }

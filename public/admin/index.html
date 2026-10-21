@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="dark light">
+<title>FUTA World · Admin metrics</title>
+<link rel="icon" href="/brand/favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#0b1020;--card:#141b33;--card2:#1b2442;--line:#27325a;--text:#eef1fb;--mut:#9aa6cf;--gold:#f5c542;--ok:#4ade80;--bad:#ff6b6b;--blue:#7cc4ff;--r:16px}
+@media(prefers-color-scheme:light){:root{--bg:#f2f4fb;--card:#fff;--card2:#eef1fa;--line:#d9dfef;--text:#141a33;--mut:#5b6690;--gold:#b7860b;--ok:#15803d;--bad:#c62828;--blue:#1d6fb8}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+h1{font-size:clamp(18px,4.6vw,24px);margin:0;display:flex;gap:8px;align-items:center}h1 small{font-weight:500;color:var(--mut);font-size:.6em}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--mut);font-size:13px}
+button,input{font:inherit}
+.btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:12px;padding:9px 14px;min-height:40px;cursor:pointer}
+.btn.gold{background:var(--gold);color:#16120a;border-color:transparent;font-weight:700}
+.btn:disabled{opacity:.55;cursor:default}
+.gate{max-width:380px;margin:12vh auto 0;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
+.gate h2{margin:0 0 4px;font-size:20px}.gate p{margin:0 0 14px;color:var(--mut)}
+.gate input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:16px;margin-bottom:10px}
+.msg{min-height:20px;margin-top:10px;color:var(--bad);font-size:14px}.msg.ok{color:var(--ok)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));margin-bottom:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0}
+.tile .k{color:var(--mut);font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+.tile .v{font-size:clamp(20px,5.4vw,28px);font-weight:750;margin-top:4px;overflow-wrap:anywhere}
+.tile .s{color:var(--mut);font-size:12.5px;margin-top:2px}
+.cols{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0}
+.card h3{margin:0 0 10px;font-size:15px}
+svg{display:block;width:100%;height:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}th{color:var(--mut);font-weight:500;text-align:left;font-size:12.5px}
+td,th{padding:7px 4px;border-bottom:1px solid var(--line)}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}.pos{color:var(--ok)}.neg{color:var(--bad)}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--card2)}
+.pill.full{color:var(--ok)}.pill.locked{color:var(--bad)}.pill.empty{color:var(--gold)}
+.demo{background:#f5c54222;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;border-radius:12px;margin-bottom:12px;font-size:13px}
+.empty{color:var(--mut);font-size:14px}
+
+/* celebrations card */
+.cel{margin-bottom:12px;border-color:color-mix(in srgb,var(--gold) 45%,var(--line));background:linear-gradient(160deg,var(--card),color-mix(in srgb,var(--card) 92%,var(--gold)))}
+.cel .top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.cel h3{margin:0;font-size:16px}.cel .sub{color:var(--mut);font-size:13px;margin:4px 0 12px}
+.cel .st{display:inline-flex;gap:7px;align-items:center;font-weight:700;font-size:13px;padding:4px 12px;border-radius:999px;background:var(--card2);border:1px solid var(--line)}.cel .st i{width:9px;height:9px;border-radius:50%;background:var(--mut)}.cel .st.on{color:var(--ok);border-color:var(--ok)}.cel .st.on i{background:var(--ok);box-shadow:0 0 0 4px #4ade8033}
+.evs{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));margin-bottom:12px}
+.ev{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1.5px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;text-align:center;min-height:76px}.ev b{font-size:13px}.ev .i{font-size:24px;line-height:1}.ev .d{display:flex;gap:3px}.ev .d u{width:10px;height:10px;border-radius:50%;display:block;border:1px solid #0003}
+.ev[aria-checked=true]{border-color:var(--gold);box-shadow:0 0 0 3px #f5c54233;background:color-mix(in srgb,var(--card2) 85%,var(--gold))}
+.cf{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));margin-bottom:12px}
+.cf label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--mut)}.cf input,.cf select{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:15px;min-height:44px;width:100%}
+.prev{--c1:#0f2b5b;--c2:#2c4f86;--c3:#c9a24a;--c4:#f0d78c;display:flex;gap:10px;align-items:center;padding:8px;border-radius:999px;color:#fff;background:linear-gradient(120deg,var(--c1),var(--c2));border:1px solid var(--c3);margin-bottom:12px;box-shadow:inset 0 0 0 3px #ffffff12}.prev .ic{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:19px;background:radial-gradient(circle at 30% 25%,var(--c4),var(--c3))}.prev b{display:block;font:600 14px Georgia,serif;color:var(--c4)}.prev span{display:block;font-size:12.5px;opacity:.92}
+.cb{display:flex;gap:8px;flex-wrap:wrap}.cb .btn{flex:1;min-width:150px;min-height:46px}
+[hidden]{display:none!important}
+@media(max-width:520px){.btn{flex:1}td,th{padding:7px 2px}table{font-size:13.5px}}
+</style></head>
+<body><div class="wrap">
+<div id="gate" class="gate" hidden>
+  <h2>🔒 Admin metrics</h2><p id="gateNote">Enter the admin password.</p>
+  <form id="gateForm" autocomplete="off"><input id="pw" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go" aria-label="Admin password"><button class="btn gold" style="width:100%" id="go">Open dashboard</button></form>
+  <div id="gateMsg" class="msg" role="alert"></div>
+</div>
+<div id="dash" hidden>
+  <header><h1>📊 FUTA World <small>admin metrics</small></h1>
+    <div class="bar"><span id="stamp">—</span><button class="btn" id="refresh" type="button">↻ Refresh</button><button class="btn" id="lock" type="button">Lock</button></div></header>
+  <div id="demoNote" class="demo" hidden>Demo data. Nothing is connected yet — this page shows real numbers once Supabase is configured.</div>
+  <div class="card cel" id="cel">
+    <div class="top"><h3>🎉 Celebrations</h3><span class="st" id="celSt"><i></i><span>OFF</span></span></div>
+    <div class="sub">Switch festive decorations on the map and on every player’s phone. Pick the occasion, write a short message, choose how long, then turn it on.</div>
+    <div class="evs" id="celEv" role="radiogroup" aria-label="Occasion"></div>
+    <div class="cf"><label>Title (shown on the banner)<input id="celTitle" maxlength="60" autocomplete="off"></label><label>Message<input id="celMsg2" maxlength="160" autocomplete="off"></label>
+      <label>Run for<select id="celFor"><option value="0">Until I turn it off</option><option value="6">6 hours</option><option value="24">1 day</option><option value="72">3 days</option><option value="168">7 days</option><option value="c">Pick an end time…</option></select></label>
+      <label id="celEndW" hidden>Ends at<input id="celEnd" type="datetime-local"></label></div>
+    <div class="prev" id="celPrev" aria-label="Preview"><div class="ic" id="celPIc"></div><div><b id="celPT"></b><span id="celPM"></span></div></div>
+    <div class="cb"><button class="btn gold" id="celOn" type="button">Turn ON</button><button class="btn" id="celOff" type="button">Turn OFF</button></div>
+    <div id="celNote" class="msg" role="status"></div>
+  </div>
+  <div class="grid" id="tiles"></div>
+  <div class="cols"><div class="card"><h3>New players · last 14 days</h3><div id="chSign"></div></div><div class="card"><h3>Money moves per hour · last 24 h</h3><div id="chHour"></div></div></div>
+  <div class="cols">
+    <div class="card"><h3>Busiest buildings now</h3><div id="busy"></div></div>
+    <div class="card"><h3>Vault</h3><div id="vault"></div></div>
+    <div class="card"><h3>Open reports</h3><div id="reps"></div></div>
+  </div>
+  <div class="card"><h3>Money activity · last 24 h</h3><div id="led"></div></div>
+</div></div>
+<script src="/world/game/onboarding/config.js"></script>
+<script src="/world/vendor/supabase.min.js"></script>
+<script src="/world/game/onboarding/api.js"></script>
+<script src="/world/game/celebrate/celebrate.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.FUTA_CONFIG || {}, demo = !!C.demo, $ = function (id) { return document.getElementById(id); };
+  var pw = '', timer = 0, busy = false;
+  var NF = new Intl.NumberFormat('en-NG');
+  var n = function (x) { return NF.format(Number(x) || 0); }, naira = function (x) { x = Number(x) || 0; return '₦' + (Math.abs(x) >= 1e9 ? (x / 1e9).toFixed(2) + 'bn' : Math.abs(x) >= 1e6 ? (x / 1e6).toFixed(1) + 'm' : NF.format(x)); };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); return e; }
+
+  /* ---------------- data ---------------- */
+  function sample() {
+    var r = function (a, b) { return Math.floor(a + Math.random() * (b - a)); };
+    return { ok: true, at: new Date().toISOString(), players: { total: 1284, new24h: r(10, 40), new7d: r(120, 260) }, teens: 187, online: { now: r(15, 60), inBuildings: r(8, 30), active24h: r(200, 400) },
+      busiest: [{ building: 'building_lt1', n: 12 }, { building: 'building_library', n: 8 }, { building: 'building_mv0q4b841p', n: 5 }],
+      money: { pocket: 48200000, bank: 912500000 }, ledger24h: [{ kind: 'atm_deposit', n: 140, net: 0 }, { kind: 'vault_heist', n: 3, net: 31000000 }, { kind: 'activity', n: 420, net: 86000 }, { kind: 'send_money', n: 61, net: 0 }],
+      vault: { status: 'full', amount: 9500000, won24h: 3, lost24h: 11, paid24h: 31000000, inJail: 2 }, chat: { room24h: 1840, dm24h: 622, groups: 37 }, reports: { spam: 3, harassment: 1 },
+      signups14d: Array.from({ length: 14 }, function () { return r(5, 45); }), hourly24h: Array.from({ length: 24 }, function () { return r(0, 90); }) };
+  }
+  async function fetchMetrics() {
+    if (demo) { await new Promise(function (r) { setTimeout(r, 250); }); return pw ? sample() : { ok: false, error: 'bad_password' }; }
+    var res = await window.FutaApi.sb().rpc('admin_metrics', { p_password: pw });
+    if (res.error) { var m = res.error.message || ''; if (m.indexOf('auth_required') >= 0) return { ok: false, error: 'auth_required' }; if (m.indexOf('admin_metrics') >= 0 && m.indexOf('function') >= 0) return { ok: false, error: 'not_installed' }; return { ok: false, error: 'failed', detail: m }; }
+    return res.data;
+  }
+
+  /* ---------------- drawing (plain DOM / SVG built from numbers only) ---------------- */
+  var NS = 'http://www.w3.org/2000/svg';
+  function s(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+  function bars(host, vals, labels, color) {
+    clear(host); var W = 320, H = 130, pad = 18, mx = Math.max.apply(null, vals.concat([1])), bw = (W - 8) / vals.length, svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'bar chart' });
+    svg.appendChild(s('line', { x1: 0, x2: W, y1: H - pad, y2: H - pad, stroke: 'currentColor', 'stroke-opacity': .25 }));
+    vals.forEach(function (v, i) { var h = Math.round((H - pad - 14) * v / mx), x = 4 + i * bw; var r = s('rect', { x: x + 1, y: H - pad - h, width: Math.max(1, bw - 3), height: h, rx: 3, fill: color }); r.appendChild(s('title', {}, labels[i] + ': ' + v)); svg.appendChild(r); });
+    svg.appendChild(s('text', { x: 4, y: H - 4, 'font-size': 10, fill: 'currentColor', 'fill-opacity': .65 }, labels[0])); svg.appendChild(s('text', { x: W - 4, y: H - 4, 'font-size': 10, 'text-anchor': 'end', fill: 'currentColor', 'fill-opacity': .65 }, labels[labels.length - 1]));
+    svg.appendChild(s('text', { x: W - 4, y: 10, 'font-size': 10, 'text-anchor': 'end', fill: 'currentColor', 'fill-opacity': .65 }, 'max ' + mx)); host.appendChild(svg);
+  }
+  function table(host, head, rows, empty) {
+    clear(host); if (!rows.length) { host.appendChild(el('div', 'empty', empty)); return; }
+    var t = el('table'), tr = el('tr'); head.forEach(function (h, i) { var th = el('th', i ? 'n' : '', h); tr.appendChild(th); }); t.appendChild(tr);
+    rows.forEach(function (r) { var row = el('tr'); r.forEach(function (c, i) { var td = el('td', i ? 'n' : '', c.t != null ? c.t : c); if (c.cls) td.className += ' ' + c.cls; row.appendChild(td); }); t.appendChild(row); }); host.appendChild(t);
+  }
+  function tile(k, v, sub) { var d = el('div', 'tile'); d.appendChild(el('div', 'k', k)); d.appendChild(el('div', 'v', v)); if (sub) d.appendChild(el('div', 's', sub)); return d; }
+  function days(a) { var out = [], t = new Date(); for (var i = a.length - 1; i >= 0; i--) { var d = new Date(t.getTime() - i * 864e5); out.push(d.getDate() + '/' + (d.getMonth() + 1)); } return out; }
+  function hours(a) { var out = [], t = new Date(); for (var i = a.length - 1; i >= 0; i--) { out.push(String(new Date(t.getTime() - i * 36e5).getHours()).padStart(2, '0') + ':00'); } return out; }
+  function nice(id) { return String(id || '').replace(/^building_/, '').replace(/_/g, ' '); }
+
+  function render(m) {
+    var T = clear($('tiles'));
+    T.appendChild(tile('Players', n(m.players.total), '+' + n(m.players.new24h) + ' today · +' + n(m.players.new7d) + ' this week'));
+    T.appendChild(tile('Online now', n(m.online.now), n(m.online.inBuildings) + ' inside buildings'));
+    T.appendChild(tile('Active 24 h', n(m.online.active24h)));
+    T.appendChild(tile('Under 18', n(m.teens)));
+    T.appendChild(tile('Cash in pockets', naira(m.money.pocket)));
+    T.appendChild(tile('In bank accounts', naira(m.money.bank)));
+    T.appendChild(tile('Chat · 24 h', n(m.chat.room24h + m.chat.dm24h), n(m.chat.room24h) + ' rooms · ' + n(m.chat.dm24h) + ' DMs · ' + n(m.chat.groups) + ' groups'));
+    bars($('chSign'), m.signups14d, days(m.signups14d), 'var(--gold)'); bars($('chHour'), m.hourly24h, hours(m.hourly24h), 'var(--blue)');
+    table($('busy'), ['Building', 'Players'], (m.busiest || []).map(function (b) { return [nice(b.building), String(b.n)]; }), 'Nobody is inside a building right now.');
+    var v = m.vault || {}, V = clear($('vault')), pill = el('span', 'pill ' + (v.status || ''), v.status === 'locked' ? 'robbery in progress' : v.status || 'not set up'); V.appendChild(pill);
+    var vt = el('div'); vt.style.marginTop = '10px'; V.appendChild(vt);
+    table(vt, ['Last 24 h', ''], [['Held now', v.amount != null ? naira(v.amount) : '—'], ['Robberies won', String(v.won24h || 0)], ['Failed / timed out', String(v.lost24h || 0)], ['Paid out', naira(v.paid24h || 0)], ['In jail now', String(v.inJail || 0)]], '');
+    var rp = Object.keys(m.reports || {}); table($('reps'), ['Reason', 'Open'], rp.map(function (k) { return [k, String(m.reports[k])]; }), 'No open reports 🎉');
+    table($('led'), ['Kind', 'Count', 'Net money'], (m.ledger24h || []).map(function (l) { var x = Number(l.net) || 0; return [l.kind.replace(/_/g, ' '), String(l.n), { t: (x > 0 ? '+' : x < 0 ? '−' : '') + naira(Math.abs(x)), cls: x > 0 ? 'pos' : x < 0 ? 'neg' : '' }]; }), 'No money moved yet.');
+    $('stamp').textContent = 'Updated ' + new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  /* ---------------- flow ---------------- */
+  function showGate(note, err) { $('dash').hidden = true; $('gate').hidden = false; $('gateNote').textContent = note || 'Enter the admin password.'; $('gateMsg').textContent = err || ''; $('gateMsg').className = 'msg'; clearInterval(timer); $('pw').value = ''; setTimeout(function () { try { $('pw').focus(); } catch (e) { } }, 50); }
+  var ERR = { bad_password: 'Wrong password.', locked: 'Too many wrong tries. Try again in 15 minutes.', not_installed: 'Run supabase/17_admin_metrics.sql in Supabase first.', failed: 'Could not load the numbers. Check your connection.' };
+  async function load(first) {
+    if (busy) return; busy = true; $('refresh').disabled = true;
+    try {
+      var m = await fetchMetrics();
+      if (!m || !m.ok) {
+        pw = ''; var e = m && m.error;
+        if (e === 'auth_required') showGate('Sign in to the game first, then come back here.', 'You are not signed in.');
+        else showGate('Enter the admin password.', (ERR[e] || ERR.failed) + (e === 'bad_password' && m.triesLeft != null ? ' ' + m.triesLeft + ' tries left.' : ''));
+        return;
+      }
+      $('gate').hidden = true; $('dash').hidden = false; $('demoNote').hidden = !demo; celInit(); render(m);
+      clearInterval(timer); timer = setInterval(function () { if (!document.hidden) load(false); }, 30000);
+    } catch (e) { if (first) showGate('Enter the admin password.', ERR.failed); }
+    finally { busy = false; $('refresh').disabled = false; }
+  }
+
+  /* ---------- celebrations (docs/CELEBRATIONS.md). The server (admin_set_celebration) checks the password again; nothing here is trusted. ---------- */
+  var CEL = { init: false, ev: 'convocation' }, FC = window.FutaCelebrate;
+  var CERR = { bad_password: 'Wrong password.', locked: 'Too many wrong tries. Try again in 15 minutes.', bad_event: 'Pick one of the occasions.', too_long: 'Title or message is too long.', bad_dates: 'The end time must be in the future (and within 90 days).', auth_required: 'Sign in to the game first.' };
+  function celPaint() {
+    var T = FC.THEMES[CEL.ev], c = T.colors, p = $('celPrev');
+    p.style.setProperty('--c1', c[0]); p.style.setProperty('--c2', c[4]); p.style.setProperty('--c3', c[1]); p.style.setProperty('--c4', c[2]);
+    $('celPIc').textContent = T.icon; $('celPT').textContent = $('celTitle').value || T.title; $('celPM').textContent = $('celMsg2').value || T.message;
+    Array.prototype.forEach.call($('celEv').children, function (b) { b.setAttribute('aria-checked', b.dataset.ev === CEL.ev ? 'true' : 'false'); });
+  }
+  function celStatus() {
+    var s = FC.state, st = $('celSt'); st.className = 'st' + (s.on ? ' on' : ''); st.lastChild.textContent = s.on ? 'ON · ' + FC.THEMES[s.event].name + (FC.leftText(s.endsAt) ? ' · ' + FC.leftText(s.endsAt) : '') : 'OFF';
+    $('celOn').textContent = s.on ? 'Update celebration' : 'Turn ON';
+  }
+  function celInit() {
+    if (CEL.init || !FC) return; CEL.init = true;
+    Object.keys(FC.THEMES).forEach(function (k) {
+      var T = FC.THEMES[k], b = el('button', 'ev'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.ev = k;
+      b.appendChild(el('span', 'i', T.icon)); b.appendChild(el('b', '', T.name)); var d = el('span', 'd'); T.colors.slice(0, 4).forEach(function (c) { var u = el('u'); u.style.background = c; d.appendChild(u); }); b.appendChild(d);
+      b.onclick = function () { var old = FC.THEMES[CEL.ev]; CEL.ev = k; if (!$('celTitle').value || $('celTitle').value === old.title) $('celTitle').value = T.title; if (!$('celMsg2').value || $('celMsg2').value === old.message) $('celMsg2').value = T.message; celPaint(); };
+      $('celEv').appendChild(b);
+    });
+    ['celTitle', 'celMsg2'].forEach(function (id) { $(id).addEventListener('input', celPaint); });
+    $('celFor').onchange = function () { $('celEndW').hidden = this.value !== 'c'; };
+    FC.onChange(function (s) { if (!CEL.touched) { CEL.ev = s.event; $('celTitle').value = s.title; $('celMsg2').value = s.message; } celPaint(); celStatus(); });
+    ['celTitle', 'celMsg2', 'celFor'].forEach(function (id) { $(id).addEventListener('input', function () { CEL.touched = true; }); }); $('celEv').addEventListener('click', function () { CEL.touched = true; });
+    $('celOn').onclick = function () { celSend(true); }; $('celOff').onclick = function () { celSend(false); };
+    setInterval(celStatus, 30000); FC.refresh();
+  }
+  async function celSend(on) {
+    var note = $('celNote'), b1 = $('celOn'), b2 = $('celOff'); note.className = 'msg'; note.textContent = ''; b1.disabled = b2.disabled = true;
+    var f = $('celFor').value, ends = null; if (on) { if (f === 'c') { if (!$('celEnd').value) { note.textContent = 'Choose when it should end.'; b1.disabled = b2.disabled = false; return; } ends = new Date($('celEnd').value).toISOString(); } else if (Number(f) > 0) ends = new Date(Date.now() + Number(f) * 36e5).toISOString(); }
+    else if (FC.state.endsAt) ends = null;
+    var args = { p_password: pw, p_event: CEL.ev, p_on: on, p_title: $('celTitle').value.trim() || null, p_message: $('celMsg2').value.trim() || null, p_starts: null, p_ends: ends };
+    try {
+      if (demo) { if (!pw) throw new Error('bad_password'); FC.demoSet({ on: on, event: CEL.ev, title: args.p_title, message: args.p_message, endsAt: ends }); }
+      else {
+        var r = await window.FutaApi.sb().rpc('admin_set_celebration', args);
+        if (r.error) { var m = r.error.message || ''; throw new Error(m.indexOf('admin_set_celebration') >= 0 && m.indexOf('function') >= 0 ? 'not_installed' : m.indexOf('auth_required') >= 0 ? 'auth_required' : 'failed'); }
+        if (!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || 'failed'); await FC.refresh();
+      }
+      CEL.touched = false; await FC.refresh(); note.className = 'msg ok'; note.textContent = on ? 'Celebration is ON. Players see it within a minute.' : 'Celebration is OFF.'; celStatus();
+    } catch (e) { note.textContent = CERR[e.message] || (e.message === 'not_installed' ? 'Run supabase/18_celebrations.sql in Supabase first.' : 'Could not save. Check your connection.'); }
+    b1.disabled = b2.disabled = false;
+  }
+  $('gateForm').onsubmit = function (ev) { ev.preventDefault(); var v = $('pw').value; if (!v) return; pw = v; $('pw').value = ''; $('go').disabled = true; load(true).then(function () { $('go').disabled = false; }); };
+  $('refresh').onclick = function () { load(false); };
+  $('lock').onclick = function () { pw = ''; showGate('Locked. Enter the password to open again.'); };
+  showGate();
+})();
+</script></body></html>

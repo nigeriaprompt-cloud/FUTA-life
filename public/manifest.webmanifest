@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "FUTAlife",
+  "short_name": "FUTAlife",
+  "description": "Your campus. Your Lagos life. Walk FUTA Akure, meet people, hustle and live it.",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "start_url": "/world/game/onboarding/signup?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0c1020",
+  "theme_color": "#0c1020",
+  "categories": ["games", "social", "lifestyle"],
+  "icons": [
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Open the map", "short_name": "Map", "url": "/world/?source=shortcut", "icons": [{ "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ]
+}

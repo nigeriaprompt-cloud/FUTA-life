@@ -1,0 +1,429 @@
+{
+ "_readme": "SOURCE OF TRUTH for the 'Where do you belong?' onboarding screen and the server validator (supabase/11_campus.sql). Edit this file, then run: python3 tools/build-campus.py . Schools/departments were taken from FUTA's own admission pages (futa.edu.ng) and public course lists in Oct 2026; FUTA adds and renames departments often, so check this list once a session. Anything marked 'assumed' is a game design choice, not an official FUTA fact.",
+ "version": 1,
+ "schools": [
+  {
+   "id": "saat",
+   "short": "SAAT",
+   "name": "School of Agriculture and Agricultural Technology",
+   "depts": [
+    {
+     "id": "agricultural_extension_and_communication_technology",
+     "name": "Agricultural Extension and Communication Technology"
+    },
+    {
+     "id": "agricultural_resource_economics",
+     "name": "Agricultural Resource Economics"
+    },
+    {
+     "id": "animal_production_and_health",
+     "name": "Animal Production and Health"
+    },
+    {
+     "id": "crop_soil_and_pest_management",
+     "name": "Crop, Soil and Pest Management"
+    },
+    {
+     "id": "ecotourism_and_wildlife_management",
+     "name": "Ecotourism and Wildlife Management"
+    },
+    {
+     "id": "fisheries_and_aquaculture_technology",
+     "name": "Fisheries and Aquaculture Technology"
+    },
+    {
+     "id": "food_science_and_technology",
+     "name": "Food Science and Technology"
+    },
+    {
+     "id": "forestry_and_wood_technology",
+     "name": "Forestry and Wood Technology"
+    }
+   ]
+  },
+  {
+   "id": "seet",
+   "short": "SEET",
+   "name": "School of Engineering and Engineering Technology",
+   "depts": [
+    {
+     "id": "agricultural_and_environmental_engineering",
+     "name": "Agricultural and Environmental Engineering"
+    },
+    {
+     "id": "civil_and_environmental_engineering",
+     "name": "Civil and Environmental Engineering"
+    },
+    {
+     "id": "computer_engineering",
+     "name": "Computer Engineering"
+    },
+    {
+     "id": "electrical_and_electronics_engineering",
+     "name": "Electrical and Electronics Engineering"
+    },
+    {
+     "id": "industrial_and_production_engineering",
+     "name": "Industrial and Production Engineering"
+    },
+    {
+     "id": "materials_and_metallurgical_engineering",
+     "name": "Materials and Metallurgical Engineering"
+    },
+    {
+     "id": "mechanical_engineering",
+     "name": "Mechanical Engineering"
+    },
+    {
+     "id": "mining_engineering",
+     "name": "Mining Engineering"
+    }
+   ]
+  },
+  {
+   "id": "sems",
+   "short": "SEMS",
+   "name": "School of Earth and Mineral Sciences",
+   "depts": [
+    {
+     "id": "applied_geology",
+     "name": "Applied Geology"
+    },
+    {
+     "id": "applied_geophysics",
+     "name": "Applied Geophysics"
+    },
+    {
+     "id": "marine_science_and_technology",
+     "name": "Marine Science and Technology"
+    },
+    {
+     "id": "meteorology_and_climate_science",
+     "name": "Meteorology and Climate Science"
+    },
+    {
+     "id": "remote_sensing_and_geoinformatics",
+     "name": "Remote Sensing and Geoinformatics"
+    }
+   ]
+  },
+  {
+   "id": "set",
+   "short": "SET",
+   "name": "School of Environmental Technology",
+   "depts": [
+    {
+     "id": "architecture",
+     "name": "Architecture"
+    },
+    {
+     "id": "building_technology",
+     "name": "Building Technology"
+    },
+    {
+     "id": "estate_management",
+     "name": "Estate Management"
+    },
+    {
+     "id": "industrial_design",
+     "name": "Industrial Design"
+    },
+    {
+     "id": "quantity_surveying",
+     "name": "Quantity Surveying"
+    },
+    {
+     "id": "surveying_and_geoinformatics",
+     "name": "Surveying and Geoinformatics"
+    },
+    {
+     "id": "urban_and_regional_planning",
+     "name": "Urban and Regional Planning"
+    }
+   ]
+  },
+  {
+   "id": "sos",
+   "short": "SOS",
+   "name": "School of Sciences",
+   "depts": [
+    {
+     "id": "biochemistry",
+     "name": "Biochemistry"
+    },
+    {
+     "id": "biology",
+     "name": "Biology"
+    },
+    {
+     "id": "biotechnology",
+     "name": "Biotechnology"
+    },
+    {
+     "id": "chemistry",
+     "name": "Chemistry"
+    },
+    {
+     "id": "mathematical_sciences",
+     "name": "Mathematical Sciences"
+    },
+    {
+     "id": "physics",
+     "name": "Physics"
+    }
+   ]
+  },
+  {
+   "id": "soc",
+   "short": "SOC",
+   "name": "School of Computing",
+   "depts": [
+    {
+     "id": "computer_science",
+     "name": "Computer Science"
+    },
+    {
+     "id": "cyber_security",
+     "name": "Cyber Security"
+    },
+    {
+     "id": "information_technology",
+     "name": "Information Technology"
+    },
+    {
+     "id": "software_engineering",
+     "name": "Software Engineering"
+    }
+   ]
+  },
+  {
+   "id": "shht",
+   "short": "SHHT",
+   "name": "School of Health and Health Technology",
+   "depts": [
+    {
+     "id": "anatomy",
+     "name": "Anatomy"
+    },
+    {
+     "id": "biomedical_technology",
+     "name": "Biomedical Technology"
+    },
+    {
+     "id": "medical_biochemistry",
+     "name": "Medical Biochemistry"
+    },
+    {
+     "id": "physiology",
+     "name": "Physiology"
+    }
+   ]
+  },
+  {
+   "id": "smat",
+   "short": "SMAT",
+   "name": "School of Management Technology",
+   "depts": [
+    {
+     "id": "entrepreneurship_management_technology",
+     "name": "Entrepreneurship Management Technology"
+    },
+    {
+     "id": "project_management_technology",
+     "name": "Project Management Technology"
+    },
+    {
+     "id": "transport_management_technology",
+     "name": "Transport Management Technology"
+    }
+   ]
+  }
+ ],
+ "levels": [
+  {
+   "id": "pre",
+   "name": "Pre-degree / UABS / JUPEB"
+  },
+  {
+   "id": "100",
+   "name": "100 Level"
+  },
+  {
+   "id": "200",
+   "name": "200 Level"
+  },
+  {
+   "id": "300",
+   "name": "300 Level"
+  },
+  {
+   "id": "400",
+   "name": "400 Level"
+  },
+  {
+   "id": "500",
+   "name": "500 Level"
+  },
+  {
+   "id": "pg",
+   "name": "Postgraduate (PGD / MSc / PhD)"
+  }
+ ],
+ "areas": [
+  {
+   "id": "south_gate",
+   "name": "South Gate"
+  },
+  {
+   "id": "north_gate",
+   "name": "North Gate"
+  },
+  {
+   "id": "aule",
+   "name": "Aule"
+  },
+  {
+   "id": "oba_ile",
+   "name": "Oba-Ile"
+  },
+  {
+   "id": "ijapo",
+   "name": "Ijapo Estate"
+  },
+  {
+   "id": "alagbaka",
+   "name": "Alagbaka"
+  },
+  {
+   "id": "oba_adesida",
+   "name": "Oba Adesida Road"
+  },
+  {
+   "id": "oda",
+   "name": "Oda Road"
+  },
+  {
+   "id": "ondo_road",
+   "name": "Ondo Road"
+  },
+  {
+   "id": "other",
+   "name": "Another part of Akure"
+  }
+ ],
+ "exams": [
+  {
+   "id": "preparing",
+   "name": "Still preparing for JAMB"
+  },
+  {
+   "id": "utme",
+   "name": "Written JAMB / UTME"
+  },
+  {
+   "id": "post_utme",
+   "name": "Doing Post-UTME"
+  },
+  {
+   "id": "predegree",
+   "name": "Applied for Pre-degree / UABS"
+  },
+  {
+   "id": "waiting",
+   "name": "Waiting for admission"
+  }
+ ],
+ "years": {
+  "min": 1985,
+  "max": 2026
+ },
+ "statuses": [
+  {
+   "id": "student",
+   "title": "Current student",
+   "blurb": "Studying at FUTA right now.",
+   "school": "required",
+   "dept": "optional",
+   "extra": {
+    "type": "level",
+    "label": "Your level",
+    "required": true
+   }
+  },
+  {
+   "id": "graduate",
+   "title": "Graduate",
+   "blurb": "Just finished and waiting for NYSC or convocation.",
+   "school": "required",
+   "dept": "optional",
+   "extra": {
+    "type": "year",
+    "label": "Year you finished",
+    "required": true,
+    "min": 2024,
+    "max": 2026
+   }
+  },
+  {
+   "id": "corper",
+   "title": "Corper",
+   "blurb": "Serving your country (NYSC).",
+   "school": "required",
+   "dept": "optional",
+   "extra": {
+    "type": "year",
+    "label": "Service year",
+    "required": true,
+    "min": 2025,
+    "max": 2026
+   }
+  },
+  {
+   "id": "alumni",
+   "title": "Alumni",
+   "blurb": "Graduated a while ago and back to relive it.",
+   "school": "required",
+   "dept": "optional",
+   "extra": {
+    "type": "year",
+    "label": "Year you graduated",
+    "required": true,
+    "min": 1985,
+    "max": 2025
+   }
+  },
+  {
+   "id": "aspirant",
+   "title": "Aspirant",
+   "blurb": "Dreaming of FUTA. On the road to admission.",
+   "school": "optional",
+   "dept": "optional",
+   "extra": {
+    "type": "exam",
+    "label": "Where are you now?",
+    "required": true
+   },
+   "schoolLabel": "School you want to join"
+  },
+  {
+   "id": "akure",
+   "title": "Akure resident",
+   "blurb": "You live in Akure but you are not part of FUTA.",
+   "school": "none",
+   "dept": "none",
+   "extra": {
+    "type": "area",
+    "label": "Where in Akure?",
+    "required": false
+   }
+  },
+  {
+   "id": "outsider",
+   "title": "Outsider",
+   "blurb": "Visiting from outside Akure. Just here for the vibes.",
+   "school": "none",
+   "dept": "none",
+   "extra": null
+  }
+ ]
+}

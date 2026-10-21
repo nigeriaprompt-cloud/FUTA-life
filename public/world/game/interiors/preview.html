@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Interior preview (dev page)</title>
+<style>html,body{margin:0;height:100%;background:#222;overflow:hidden;font:12px system-ui}canvas{display:block;width:100vw;height:100vh;touch-action:none}#hud{position:fixed;left:8px;top:8px;background:#000b;color:#fff;padding:6px 9px;border-radius:8px;white-space:pre;max-width:90vw}</style></head><body>
+<canvas id="c"></canvas><div id="hud"></div>
+<!-- DEV PAGE. ?tpl=hostel[&variant=x][&name=Building Name][&t=15.5 (Nigeria hour)][&yaw=0.6][&pitch=0.75][&dist=12][&npcs=1]  Builds one template, runs FutaCheck, exposes window.__prev -->
+<script src="../../vendor/three.min.js"></script>
+<script src="../avatar/avatar-options.js"></script><script src="../avatar/avatar-core.js"></script><script src="../avatar/avatar-body.js"></script><script src="../avatar/avatar-wear.js"></script><script src="../avatar/avatar-rig.js"></script><script src="../avatar/avatar-build.js"></script><script src="../avatar/avatar-npc.js"></script>
+<script src="../interior/clock.js"></script><script src="../interior/activities.js"></script><script src="../live/interact.js"></script>
+<script src="kit.js"></script><script src="furniture.js"></script><script src="acts.js"></script><script src="rooms.js"></script><script src="stage.js"></script><script src="templates.js"></script><script src="check.js"></script>
+<script src="tpl_res.js"></script><script src="tpl_bank.js"></script><script src="tpl_edu.js" onerror="void 0"></script><script src="tpl_commerce.js" onerror="void 0"></script><script src="tpl_care.js" onerror="void 0"></script><script src="tpl_vault.js" onerror="void 0"></script>
+<script>
+const q = new URLSearchParams(location.search); if (q.get('t')) FutaClock.setFixed(+q.get('t'));
+const id = q.get('tpl') || 'hostel', stage = FutaStage.create({ canvas: document.getElementById('c') }); addEventListener('resize', () => stage.resize());
+const fake = { id: 'preview_' + id, name: q.get('name') || '', type: q.get('type') || '' }; let built;
+try { built = FutaTemplates.make(fake, { id, variant: q.get('variant') }); } catch (e) { document.getElementById('hud').textContent = 'BUILD FAILED: ' + e.message + '\n' + e.stack.split('\n').slice(0, 4).join('\n'); throw e; }
+stage.setRoom(built); stage.applySky(FutaClock.sky()); if (q.get('yaw')) stage.yaw = +q.get('yaw'); if (q.get('pitch')) stage.pitch = +q.get('pitch'); if (q.get('dist')) stage.dist = +q.get('dist');
+const rep = FutaCheck.run(built); window.__prev = { built, stage, report: rep, id };
+if (q.get('hud') === '0') document.getElementById('hud').style.display = 'none'; document.getElementById('hud').textContent = id + ' ' + built.w + '×' + built.d + ' m\n' + JSON.stringify(rep.stats) + '\n' + (rep.errors.length ? 'ERRORS:\n' + rep.errors.join('\n') : 'no errors') + (rep.warnings.length ? '\nwarnings:\n' + rep.warnings.join('\n') : '');
+let last = performance.now(); (function loop(n) { const dt = Math.min(.05, (n - last) / 1000); last = n; stage.frame(dt); window.__frames = (window.__frames || 0) + 1; requestAnimationFrame(loop); })(last);
+</script></body></html>

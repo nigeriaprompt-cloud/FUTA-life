@@ -1,0 +1,668 @@
+{
+ "_readme": "SOURCE OF TRUTH for everything a player can DO inside buildings. Edit here, then run: python3 tools/build-options.py (it writes supabase/04_activities.sql and public/world/game/interior/activities.js). Effects are applied by the SERVER (do_activity); the client only shows them. energy/hunger/mood are 0-100; knowledge is unbounded (counts up); cash is game coins taken from the pocket (negative number = cost). cooldown is seconds per player per activity. venues = template ids where it is allowed. ui: 'atm' opens the ATM panel, 'creator' opens the character creator (wardrobe/salon).",
+ "stats": {
+  "energy": 100,
+  "hunger": 80,
+  "mood": 60,
+  "knowledge": 0
+ },
+ "decay": {
+  "hungerPerMin": 0.16,
+  "energyPerMin": 0.1,
+  "floor": 5
+ },
+ "activities": [
+  {
+   "id": "sleep",
+   "label": "Sleep",
+   "icon": "😴",
+   "secs": 6,
+   "pose": "lie",
+   "energy": 50,
+   "hunger": -6,
+   "mood": 4,
+   "cooldown": 90,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel"
+   ]
+  },
+  {
+   "id": "wardrobe",
+   "label": "Change clothes",
+   "icon": "👗",
+   "secs": 1,
+   "pose": "idle",
+   "ui": "creator",
+   "cooldown": 0,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel"
+   ]
+  },
+  {
+   "id": "study",
+   "label": "Study",
+   "icon": "📚",
+   "secs": 5,
+   "pose": "read",
+   "energy": -8,
+   "hunger": -3,
+   "mood": -2,
+   "knowledge": 4,
+   "cooldown": 25,
+   "venues": [
+    "hostel",
+    "house",
+    "library",
+    "faculty",
+    "student_union",
+    "hotel"
+   ]
+  },
+  {
+   "id": "read_book",
+   "label": "Read a book",
+   "icon": "📖",
+   "secs": 4,
+   "pose": "read",
+   "energy": -4,
+   "mood": 1,
+   "knowledge": 3,
+   "cooldown": 20,
+   "venues": [
+    "library",
+    "bookshop",
+    "faculty",
+    "primary_school"
+   ]
+  },
+  {
+   "id": "cook",
+   "label": "Cook (₦300)",
+   "icon": "🍳",
+   "secs": 6,
+   "pose": "sweep",
+   "energy": -3,
+   "hunger": 35,
+   "mood": 4,
+   "cash": -300,
+   "cooldown": 45,
+   "venues": [
+    "hostel",
+    "house"
+   ]
+  },
+  {
+   "id": "eat_home",
+   "label": "Eat at home",
+   "icon": "🍽️",
+   "secs": 5,
+   "pose": "eat",
+   "hunger": 15,
+   "mood": 3,
+   "cooldown": 60,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel"
+   ]
+  },
+  {
+   "id": "snack",
+   "label": "Fridge snack",
+   "icon": "🥤",
+   "secs": 3,
+   "pose": "idle",
+   "hunger": 8,
+   "mood": 1,
+   "cooldown": 30,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel"
+   ]
+  },
+  {
+   "id": "drink_water",
+   "label": "Drink water",
+   "icon": "💧",
+   "secs": 3,
+   "pose": "idle",
+   "hunger": 1,
+   "mood": 1,
+   "cooldown": 30,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel",
+    "library",
+    "faculty",
+    "lecture_theatre",
+    "auditorium",
+    "admin_office",
+    "bank",
+    "health_centre",
+    "clinic",
+    "gym",
+    "sports_room",
+    "student_union",
+    "church",
+    "mosque",
+    "museum",
+    "primary_school",
+    "visitor_centre",
+    "lab",
+    "computer_lab",
+    "pharmacy",
+    "salon",
+    "restaurant",
+    "carwash",
+    "workshop",
+    "cyber_cafe",
+    "business_centre"
+   ]
+  },
+  {
+   "id": "shower",
+   "label": "Take a bath",
+   "icon": "🚿",
+   "secs": 5,
+   "pose": "idle",
+   "energy": 4,
+   "mood": 6,
+   "cooldown": 120,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel",
+    "gym"
+   ]
+  },
+  {
+   "id": "watch_tv",
+   "label": "Watch TV",
+   "icon": "📺",
+   "secs": 6,
+   "pose": "sit",
+   "energy": -2,
+   "mood": 6,
+   "cooldown": 40,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel",
+    "student_union",
+    "carwash",
+    "restaurant",
+    "salon"
+   ]
+  },
+  {
+   "id": "check_mirror",
+   "label": "Check your fit",
+   "icon": "🪞",
+   "secs": 3,
+   "pose": "idle",
+   "mood": 2,
+   "cooldown": 60,
+   "venues": [
+    "hostel",
+    "house",
+    "hotel",
+    "salon",
+    "gym"
+   ]
+  },
+  {
+   "id": "pray",
+   "label": "Pray",
+   "icon": "🙏",
+   "secs": 6,
+   "pose": "pray",
+   "mood": 8,
+   "cooldown": 120,
+   "venues": [
+    "church",
+    "mosque"
+   ]
+  },
+  {
+   "id": "give_talk",
+   "label": "Give a short talk",
+   "icon": "🎤",
+   "secs": 5,
+   "pose": "teach",
+   "energy": -3,
+   "mood": 3,
+   "knowledge": 1,
+   "cooldown": 90,
+   "venues": [
+    "lecture_theatre",
+    "auditorium",
+    "church",
+    "faculty",
+    "primary_school"
+   ]
+  },
+  {
+   "id": "attend_lecture",
+   "label": "Attend lecture",
+   "icon": "🎓",
+   "secs": 6,
+   "pose": "sit",
+   "energy": -6,
+   "hunger": -3,
+   "knowledge": 4,
+   "cooldown": 40,
+   "venues": [
+    "lecture_theatre",
+    "auditorium",
+    "faculty",
+    "primary_school"
+   ]
+  },
+  {
+   "id": "lab_work",
+   "label": "Lab work",
+   "icon": "🔬",
+   "secs": 6,
+   "pose": "read",
+   "energy": -5,
+   "knowledge": 3,
+   "cooldown": 40,
+   "venues": [
+    "lab",
+    "faculty",
+    "computer_lab",
+    "museum"
+   ]
+  },
+  {
+   "id": "use_computer",
+   "label": "Use computer",
+   "icon": "💻",
+   "secs": 5,
+   "pose": "type",
+   "energy": -3,
+   "mood": 1,
+   "knowledge": 2,
+   "cooldown": 20,
+   "venues": [
+    "computer_lab",
+    "library",
+    "faculty",
+    "admin_office",
+    "lab"
+   ]
+  },
+  {
+   "id": "browse_cafe",
+   "label": "Browse (₦100)",
+   "icon": "🌐",
+   "secs": 5,
+   "pose": "type",
+   "energy": -2,
+   "mood": 5,
+   "knowledge": 1,
+   "cash": -100,
+   "cooldown": 20,
+   "venues": [
+    "cyber_cafe",
+    "business_centre",
+    "student_union"
+   ]
+  },
+  {
+   "id": "print_doc",
+   "label": "Print (₦50)",
+   "icon": "🖨️",
+   "secs": 3,
+   "pose": "idle",
+   "mood": 1,
+   "knowledge": 1,
+   "cash": -50,
+   "cooldown": 15,
+   "venues": [
+    "print_shop",
+    "business_centre",
+    "cyber_cafe",
+    "library",
+    "admin_office"
+   ]
+  },
+  {
+   "id": "buy_snack",
+   "label": "Buy snack (₦150)",
+   "icon": "🍪",
+   "secs": 3,
+   "pose": "idle",
+   "hunger": 15,
+   "mood": 2,
+   "cash": -150,
+   "cooldown": 20,
+   "venues": [
+    "provisions",
+    "supermarket",
+    "petrol_shop",
+    "student_union",
+    "hotel",
+    "carwash",
+    "workshop"
+   ]
+  },
+  {
+   "id": "buy_drink",
+   "label": "Buy drink (₦200)",
+   "icon": "🥤",
+   "secs": 3,
+   "pose": "idle",
+   "hunger": 6,
+   "mood": 3,
+   "cash": -200,
+   "cooldown": 20,
+   "venues": [
+    "provisions",
+    "supermarket",
+    "petrol_shop",
+    "student_union",
+    "restaurant",
+    "carwash",
+    "bakery",
+    "hotel",
+    "church"
+   ]
+  },
+  {
+   "id": "buy_textbook",
+   "label": "Buy textbook (₦2,500)",
+   "icon": "📕",
+   "secs": 3,
+   "pose": "read",
+   "knowledge": 5,
+   "cash": -2500,
+   "cooldown": 60,
+   "venues": [
+    "bookshop"
+   ]
+  },
+  {
+   "id": "buy_meds",
+   "label": "Buy medicine (₦800)",
+   "icon": "💊",
+   "secs": 3,
+   "pose": "idle",
+   "energy": 8,
+   "mood": 3,
+   "cash": -800,
+   "cooldown": 60,
+   "venues": [
+    "pharmacy",
+    "clinic",
+    "health_centre"
+   ]
+  },
+  {
+   "id": "buy_phone_acc",
+   "label": "Buy phone accessory (₦1,500)",
+   "icon": "🎧",
+   "secs": 3,
+   "pose": "phone",
+   "mood": 6,
+   "cash": -1500,
+   "cooldown": 60,
+   "venues": [
+    "phone_shop"
+   ]
+  },
+  {
+   "id": "order_food",
+   "label": "Order food (₦1,500)",
+   "icon": "🍛",
+   "secs": 5,
+   "pose": "idle",
+   "energy": 3,
+   "hunger": 55,
+   "mood": 6,
+   "cash": -1500,
+   "cooldown": 45,
+   "venues": [
+    "restaurant"
+   ]
+  },
+  {
+   "id": "eat_meal",
+   "label": "Sit and eat (₦1,500)",
+   "icon": "🍛",
+   "secs": 6,
+   "pose": "eat",
+   "energy": 3,
+   "hunger": 55,
+   "mood": 6,
+   "cash": -1500,
+   "cooldown": 45,
+   "venues": [
+    "restaurant",
+    "hotel",
+    "student_union",
+    "bakery"
+   ]
+  },
+  {
+   "id": "buy_cake",
+   "label": "Buy cake (₦1,200)",
+   "icon": "🍰",
+   "secs": 3,
+   "pose": "idle",
+   "hunger": 25,
+   "mood": 9,
+   "cash": -1200,
+   "cooldown": 40,
+   "venues": [
+    "bakery",
+    "restaurant"
+   ]
+  },
+  {
+   "id": "get_hair",
+   "label": "Get your hair done (₦3,000)",
+   "icon": "💇",
+   "secs": 5,
+   "pose": "idle",
+   "mood": 12,
+   "cash": -3000,
+   "cooldown": 120,
+   "ui": "creator",
+   "venues": [
+    "salon"
+   ]
+  },
+  {
+   "id": "checkup",
+   "label": "Check-up (₦500)",
+   "icon": "🩺",
+   "secs": 6,
+   "pose": "lie",
+   "energy": 10,
+   "mood": 3,
+   "cash": -500,
+   "cooldown": 90,
+   "venues": [
+    "health_centre",
+    "clinic"
+   ]
+  },
+  {
+   "id": "workout",
+   "label": "Work out",
+   "icon": "🥊",
+   "secs": 5,
+   "pose": "workout",
+   "energy": -12,
+   "hunger": -6,
+   "mood": 7,
+   "cooldown": 40,
+   "venues": [
+    "gym",
+    "sports_room"
+   ]
+  },
+  {
+   "id": "lift_weights",
+   "label": "Lift weights",
+   "icon": "🏋️",
+   "secs": 5,
+   "pose": "workout",
+   "energy": -14,
+   "hunger": -6,
+   "mood": 6,
+   "cooldown": 40,
+   "venues": [
+    "gym"
+   ]
+  },
+  {
+   "id": "run_treadmill",
+   "label": "Run on treadmill",
+   "icon": "🏃",
+   "secs": 6,
+   "pose": "run",
+   "energy": -15,
+   "hunger": -7,
+   "mood": 7,
+   "cooldown": 40,
+   "venues": [
+    "gym"
+   ]
+  },
+  {
+   "id": "play_chess",
+   "label": "Play chess",
+   "icon": "♟️",
+   "secs": 6,
+   "pose": "sit",
+   "energy": -2,
+   "mood": 5,
+   "knowledge": 1,
+   "cooldown": 40,
+   "venues": [
+    "sports_room",
+    "student_union"
+   ]
+  },
+  {
+   "id": "play_pingpong",
+   "label": "Play table tennis",
+   "icon": "🏓",
+   "secs": 6,
+   "pose": "play",
+   "energy": -6,
+   "mood": 7,
+   "cooldown": 40,
+   "venues": [
+    "sports_room"
+   ]
+  },
+  {
+   "id": "play_game",
+   "label": "Play foosball",
+   "icon": "⚽",
+   "secs": 6,
+   "pose": "play",
+   "energy": -3,
+   "mood": 6,
+   "cooldown": 40,
+   "venues": [
+    "student_union",
+    "sports_room"
+   ]
+  },
+  {
+   "id": "play_music",
+   "label": "Play the keyboard",
+   "icon": "🎹",
+   "secs": 6,
+   "pose": "type",
+   "mood": 5,
+   "cooldown": 60,
+   "venues": [
+    "church",
+    "auditorium"
+   ]
+  },
+  {
+   "id": "view_exhibit",
+   "label": "Look closely",
+   "icon": "🔎",
+   "secs": 4,
+   "pose": "read",
+   "mood": 3,
+   "knowledge": 1,
+   "cooldown": 30,
+   "venues": [
+    "museum",
+    "visitor_centre",
+    "sports_room",
+    "library",
+    "faculty"
+   ]
+  },
+  {
+   "id": "read_notice",
+   "label": "Read notice board",
+   "icon": "📌",
+   "secs": 3,
+   "pose": "read",
+   "knowledge": 1,
+   "cooldown": 60,
+   "venues": [
+    "faculty",
+    "admin_office",
+    "student_union",
+    "hostel",
+    "library",
+    "primary_school"
+   ]
+  },
+  {
+   "id": "operate_generator",
+   "label": "Switch on generator",
+   "icon": "⚡",
+   "secs": 4,
+   "pose": "idle",
+   "mood": 2,
+   "knowledge": 1,
+   "cooldown": 60,
+   "venues": [
+    "workshop"
+   ]
+  },
+  {
+   "id": "tinker",
+   "label": "Tinker with tools",
+   "icon": "🔧",
+   "secs": 5,
+   "pose": "sweep",
+   "energy": -4,
+   "knowledge": 2,
+   "cooldown": 40,
+   "venues": [
+    "workshop"
+   ]
+  },
+  {
+   "id": "atm",
+   "label": "Use the ATM",
+   "icon": "🏧",
+   "secs": 1,
+   "pose": "phone",
+   "ui": "atm",
+   "cooldown": 0,
+   "venues": [
+    "bank"
+   ]
+  }
+ ]
+}
