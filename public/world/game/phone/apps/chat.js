@@ -15,6 +15,10 @@
    and is also retried automatically when the connection returns. Each message carries a client id (p_client), so a retry can never post twice. Unsent messages
    are kept in the OUTBOX (memory + localStorage) so closing the phone or reloading does not lose them.
    QUICK REPLIES: tappable suggestion chips above the message box (QUICK / suggest() below). They only fill in text; sending still goes through the normal RPCs.
+   NEIGHBOURS (supabase/23_neighbours.sql): every player is put at random into a small group of up to 8 (same age band). ensure_neighbours() returns it; it shows as its own
+   "Neighbours" tab here AND as its own Neighbours app on the phone home screen. It is a normal group underneath (ticks, unread, realtime), but cannot be left or invited into.
+   REPLIES (groups + neighbours): tap ↩ Reply under a message; the reply carries p_reply_to and shows a quote of the original. SUGGESTIONS: the chips are time-aware
+   (Good morning / afternoon / evening, Lagos time) and answer the last message (greeting back, "You’re welcome" after thanks, "Thank you" after someone helped).
    Other code can open a conversation:  FutaChat.openWith({ id, username })  (used by the name-label profile card in live/ui.js). */
 (function (g) {
   'use strict';
@@ -29,7 +33,7 @@
     insufficient_funds: 'Not enough money in your bank. Deposit at an ATM first.', in_jail: 'You can’t send money while in jail.'
   };
   const nice = (e) => { const m = (e && e.message) || String(e || ''), k = Object.keys(NICE).sort((x, y) => y.length - x.length).find(x => m.indexOf(x) >= 0);/* longest code first: message_not_allowed must not match not_allowed */ return k ? NICE[k] : (m || 'Something went wrong.'); };
-  let chatOpen = false, user = null, chs = [], dmHandler = null, grpHandler = null, tickHandler = null;
+  let chatOpen = false, user = null, chs = [], dmHandler = null, grpHandler = null, tickHandler = null, NB = null, nbErr = null;
 
   /* ---------- OUTBOX: messages that have not reached the server yet. The open Chat screen (hooks) draws their status. ---------- */
   const OB_MAX = 30, OB_TTL = 24 * 3600e3;
@@ -61,7 +65,8 @@
      Chat icon badge = everything added up, shown as 99+ above 99. Rows and tabs inside the app show their own counts. */
   const U = { dms: {}, groups: {}, invites: 0, alerts: 0, campus: 0 }; let paint = null, syncHook = null, viewTab = null;
   const sumOf = (o) => Object.values(o).reduce((a, b) => a + (b | 0), 0), capN = (n) => n > 99 ? '99+' : String(n);
-  const refresh = () => { Ph.badge('chat', sumOf(U.dms) + sumOf(U.groups) + (U.invites | 0) + (U.alerts | 0) + (U.campus | 0)); if (paint) paint(); };
+  const nbUn = () => NB ? (U.groups[NB.id] | 0) : 0;   // the neighbour group has its own badge (Neighbours app + tab), so it is not counted twice
+  const refresh = () => { Ph.badge('chat', sumOf(U.dms) + sumOf(U.groups) - nbUn() + (U.invites | 0) + (U.alerts | 0) + (U.campus | 0)); Ph.badge('neighbours', nbUn()); if (paint) paint(); };
   const addDm = (id) => { U.dms[id] = (U.dms[id] | 0) + 1; refresh(); }, clearDm = (id) => { if (U.dms[id]) { delete U.dms[id]; refresh(); } };
   const addGrp = (id) => { U.groups[id] = (U.groups[id] | 0) + 1; refresh(); }, clearGrp = (id) => { if (U.groups[id]) { delete U.groups[id]; refresh(); } };
   const resetUnread = () => { U.dms = {}; U.groups = {}; U.invites = 0; U.alerts = 0; U.campus = 0; refresh(); };
@@ -89,11 +94,22 @@
   const markGroup = (gid) => { clearGrp(gid); clearTimeout(tG[gid]); tG[gid] = setTimeout(() => { const a = Ph.api(); if (a && user && !Ph.demo()) a.rpc('mark_group_read', { p_group: gid }).catch(() => { }); }, 400); };
   g.addEventListener('online', syncSoon); g.document.addEventListener('visibilitychange', () => { if (!g.document.hidden) syncSoon(); });
 
+  /* ---------- NEIGHBOURS: ask the server for my random neighbour group (it is created the first time) ---------- */
+  let nbBusy = null;
+  function ensureNb() {
+    if (NB) return Promise.resolve(NB); const a = Ph.api(); if (!a || !user || Ph.demo()) return Promise.resolve(null);
+    if (nbBusy) return nbBusy; const me = user;
+    nbBusy = a.rpc('ensure_neighbours').then(r => { if (user !== me) return null; nbErr = null; if (r && r.id) { NB = { id: r.id, name: r.name || 'Neighbours', members: r.members | 0 }; refresh(); } return NB; })
+      .catch(e => { nbErr = e; return null; }).then(x => { nbBusy = null; return x; });
+    return nbBusy;
+  }
+  const nbMsg = () => { const m = (nbErr && nbErr.message) || ''; return /finish_sign_up/.test(m) ? 'Finish sign-up to meet your neighbours.' : /ensure_neighbours|schema cache|could not find/i.test(m) ? 'Neighbours is not switched on yet.' : nbErr ? nice(nbErr) : 'Could not find your neighbours. Try again in a moment.'; };
+
   /* ---------- background listeners (badge when the Chat app is closed) ---------- */
-  function stopListeners() { chs.forEach(c => { try { c.unsubscribe(); } catch (e) { } }); chs = []; user = null; if (!Ph.demo()) resetUnread(); }
+  function stopListeners() { chs.forEach(c => { try { c.unsubscribe(); } catch (e) { } }); chs = []; user = null; NB = null; nbErr = null; if (!Ph.demo()) resetUnread(); }
   function startListeners() {
     const u = Ph.getUser(), api = Ph.api(); if (!u || Ph.demo() || !api || user === u.id) return; stopListeners(); user = u.id;
-    obLoad(); markDelivered(); syncUnread(); setTimeout(flush, 800);   // catch up: tell senders we are online, and resend anything that never left this phone
+    obLoad(); markDelivered(); syncUnread(); ensureNb(); setTimeout(flush, 800);   // catch up: tell senders we are online, and resend anything that never left this phone
     try {
       const sb = api.sb(), mk = (name, table, event, filter, fn) => { const o = { event, schema: 'public', table }; if (filter) o.filter = filter; chs.push(sb.channel('phone:' + name + ':' + u.id).on('postgres_changes', o, (m) => { if (m && m.new) fn(m.new); }).subscribe()); };
       mk('dm', 'dms', 'INSERT', 'recipient=eq.' + u.id, (r) => { markDelivered(); if (dmHandler && dmHandler(r)) return; if (r.kind === 'money') return; addDm(r.sender); });   // money has its own alert below
@@ -108,7 +124,7 @@
     } catch (e) { console.warn('[phone chat]', e.message); }
   }
   Ph.on('user', (u) => { if (!u) { stopListeners(); outbox = []; } else startListeners(); });
-  Ph.on('open', (id) => { chatOpen = id === 'chat'; if (chatOpen) syncSoon(); });   // counts are cleared per conversation as each one is opened
+  Ph.on('open', (id) => { chatOpen = id === 'chat' || id === 'neighbours'; if (chatOpen) syncSoon(); });   // counts are cleared per conversation as each one is opened
   g.FutaChat = { openWith(p) { if (!p || !p.id) return; Ph.show(true); Ph.open('chat', { peer: { id: p.id, username: p.username || 'Player' } }); } };
 
   /* demo data (device only) */
@@ -118,13 +134,13 @@
   const seedDemo = () => { if (demoSeeded || !Ph.demo()) return; demoSeeded = true; demoGroups.push({ id: 'dg0', name: 'Library crew', role: 'member' }); U.dms = { d1: 3, d2: 120 }; U.groups = { dg0: 5 }; refresh(); };   // demo mode only: show what the counts look like
   setTimeout(seedDemo, 1200);
 
-  Ph.registerApp({
+  const CHAT = {
     id: 'chat', name: 'Chat', icon: 'chat', color: ['#35b27a', '#0f5a3b'],
     mount(body, ctx) {
       const I = ctx.icons, demo = Ph.demo(), api = Ph.api(); seedDemo(); const bub = new Map(), dmIds = new Map(); let lastIn = '', chipsKind = '', u = Ph.getUser(), dead = false, tab = 'campus', ch = null, seen = new Set(), send = null, peer = null, group = null, panel = false, bld = null, searchT = 0;
-      body.innerHTML = '<div class="ph-tabs"><button type="button" data-t="campus" class="on">Campus<i class="ph-tn" hidden></i></button><button type="button" data-t="building" hidden>Building</button><button type="button" data-t="friends">Friends<i class="ph-tn" hidden></i></button><button type="button" data-t="groups">Groups<i class="ph-tn" hidden></i></button></div><div class="ph-log" aria-live="polite"></div><div class="ph-quick" hidden></div><form class="ph-send" autocomplete="off"><input maxlength="' + MAX + '" placeholder="Message…" enterkeyhint="send" aria-label="Message"><button aria-label="Send">' + I.send + '</button></form>';
+      body.innerHTML = '<div class="ph-tabs"><button type="button" data-t="campus" class="on">Campus<i class="ph-tn" hidden></i></button><button type="button" data-t="neighbours">Neighbours<i class="ph-tn" hidden></i></button><button type="button" data-t="building" hidden>Building</button><button type="button" data-t="friends">Friends<i class="ph-tn" hidden></i></button><button type="button" data-t="groups">Groups<i class="ph-tn" hidden></i></button></div><div class="ph-log" aria-live="polite"></div><div class="ph-quick" hidden></div><div class="ph-replybar" hidden></div><form class="ph-send" autocomplete="off"><input maxlength="' + MAX + '" placeholder="Message…" enterkeyhint="send" aria-label="Message"><button aria-label="Send">' + I.send + '</button></form>';
       const log = body.querySelector('.ph-log'), quick = body.querySelector('.ph-quick'), form = body.querySelector('form'), inp = form.querySelector('input'), tabs = body.querySelectorAll('.ph-tabs button'), bTab = body.querySelector('[data-t=building]');
-      const sb = () => api.sb(), rpc = (n, a) => api.rpc(n, a);
+      const sb = () => api.sb(), rpc = (n, a) => api.rpc(n, a), rbar = body.querySelector('.ph-replybar'), msgs = new Map(); let replyTo = null;
 
       /* ---- small helpers ---- */
       const sysMsg = (t) => { const d = document.createElement('div'); d.className = 'ph-sys-msg'; d.textContent = t; log.appendChild(d); log.scrollTop = 1e9; return d; };
@@ -137,6 +153,15 @@
         d.innerHTML = '<span class="ph-av" style="width:2.2em;height:2.2em;font-size:.9em"></span><span class="t"><b></b><small></small></span>';
         d.querySelector('.ph-av').textContent = (name || '?').charAt(0).toUpperCase(); d.querySelector('b').textContent = name || 'Player'; d.querySelector('small').textContent = sub || ''; if (cnt) { d.dataset.u = cnt.k + ':' + cnt.id; const pl = document.createElement('span'); pl.className = 'ph-un'; const n0 = ((cnt.k === 'dm' ? U.dms : U.groups)[cnt.id]) | 0; pl.hidden = !n0; pl.textContent = capN(n0); d.querySelector('.t').after(pl); d.classList.toggle('has-un', !!n0); } (acts || []).forEach(a => d.appendChild(a)); return d;
       }
+      /* ---- replies (groups + neighbours) ---- */
+      const quoteEl = (r) => { const q = document.createElement('div'), b = document.createElement('b'), t = document.createElement('span'); q.className = 'ph-quote'; b.textContent = r.username || 'Message'; t.textContent = String(r.body || '').slice(0, 80); q.append(b, t); return q; };
+      function clearReply() { replyTo = null; rbar.hidden = true; rbar.innerHTML = ''; }
+      function setReply(r) {
+        replyTo = { id: r.id, username: r.username || 'Player', body: String(r.body || '').slice(0, 120) }; rbar.innerHTML = ''; rbar.hidden = false;
+        const t = document.createElement('span'), x = document.createElement('button'); t.className = 'ph-rp-t'; t.append('↩ Replying to ');
+        const b = document.createElement('b'); b.textContent = replyTo.username; t.append(b, ': ' + replyTo.body.slice(0, 50)); x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Cancel reply'); x.onclick = clearReply; rbar.append(t, x); inp.focus();
+      }
+
       /* ---- ticks: clock / ✓ / ✓✓ / ✓✓ light blue / red ! ---- */
       const TICKS = {
         pending: '<svg viewBox="0 0 16 11"><circle cx="8" cy="5.5" r="4.3"/><path d="M8 3.3v2.4l1.6 1"/></svg>',
@@ -158,7 +183,7 @@
       }
       /* a message I am sending right now (draws the clock, then sent / failed as the outbox reports) */
       function outBubble(rec) {
-        const d = document.createElement('div'); d.className = 'ph-msg me'; d.appendChild(document.createTextNode(rec.text)); const b = addMeta(d, inflight.has(rec.cid) || !rec.failed ? 'pending' : 'failed', rec.ts); b.rec = rec; b.k = rec.k;
+        const d = document.createElement('div'); d.className = 'ph-msg me'; if (rec.reply) d.appendChild(quoteEl(rec.reply)); d.appendChild(document.createTextNode(rec.text)); const b = addMeta(d, inflight.has(rec.cid) || !rec.failed ? 'pending' : 'failed', rec.ts); b.rec = rec; b.k = rec.k;
         d.onclick = () => { if (b.st === 'failed') deliver(rec); }; bub.set(rec.cid, b); log.appendChild(d); log.scrollTop = 1e9; return b;
       }
       const H = hooks = {
@@ -173,7 +198,7 @@
         try { const { data } = await sb().from('dms').select('delivered_at,read_at').eq('id', id).maybeSingle(); if (data && !dead) setStatus(b, data.read_at ? 'seen' : data.delivered_at ? 'delivered' : 'sent'); } catch (e) { /* ticks are cosmetic */ }
       }
       tickHandler = (r) => { const b = dmIds.get(r.id); if (b) setStatus(b, r.read_at ? 'seen' : r.delivered_at ? 'delivered' : 'sent'); };
-      const sel = async (table, full, base, f) => { let r = await f(sb().from(table).select(full)); if (r.error && /client_id|delivered_at|read_at|kind|amount/.test(r.error.message || '')) r = await f(sb().from(table).select(base)); return r; };   // works before 14/15 SQL is run
+      const sel = async (table, full, base, f) => { let r = await f(sb().from(table).select(full)); if (r.error && /client_id|delivered_at|read_at|kind|amount|reply_to/.test(r.error.message || '')) r = await f(sb().from(table).select(base)); return r; };   // works before 14/15 SQL is run
       const cidsOf = (rows) => new Set((rows || []).map(x => x.client_id).filter(Boolean));
       /* unsent messages of THIS conversation reappear (red or sending) when you come back to it; the outbox retries them */
       function restorePending(scope, loaded) {
@@ -186,11 +211,15 @@
         const d = document.createElement('div'); d.className = 'ph-msg' + (mine ? ' me' : '');
         if (!mine) { lastIn = String(m.body || ''); suggest(); }
         if (!mine && m.username) { const s = document.createElement('small'); s.textContent = m.username; if (m.user_id && g.FutaProfile) { s.className = 'ph-who'; s.title = 'View profile'; s.onclick = () => showProfile({ id: m.user_id, username: m.username }); } d.appendChild(s); }
-        d.appendChild(document.createTextNode(m.body)); if (mine) { const b = addMeta(d, stOf(m, kind), m.created_at); b.id = m.id; if (kind === 'd' && m.id != null) dmIds.set(m.id, b); }
+        if (kind === 'g' && m.id != null) msgs.set(m.id, { username: m.username || (mine ? 'You' : 'Player'), body: m.body });
+        if (kind === 'g' && m.reply_to) d.appendChild(quoteEl(msgs.get(m.reply_to) || { username: 'Earlier message', body: '' }));
+        d.appendChild(document.createTextNode(m.body));
+        if (kind === 'g' && m.id != null) { const rb = document.createElement('button'); rb.type = 'button'; rb.className = 'ph-rpb'; rb.textContent = '↩ Reply'; rb.setAttribute('aria-label', 'Reply to ' + (m.username || 'message')); rb.onclick = (e) => { e.stopPropagation(); setReply({ id: m.id, username: mine ? 'yourself' : m.username, body: m.body }); }; d.appendChild(rb); }
+        if (mine) { const b = addMeta(d, stOf(m, kind), m.created_at); b.id = m.id; if (kind === 'd' && m.id != null) dmIds.set(m.id, b); }
         log.appendChild(d); while (log.children.length > 80) log.firstChild.remove(); log.scrollTop = 1e9;
       }
       function reset(showForm, placeholder) {
-        try { ch && ch.unsubscribe(); } catch (e) { } ch = null; dmHandler = null; grpHandler = null; peer = null; group = null; panel = false; send = null; seen = new Set(); bub.clear(); dmIds.clear(); log.innerHTML = ''; lastIn = ''; chipsKind = ''; quick.hidden = true; quick.innerHTML = '';
+        try { ch && ch.unsubscribe(); } catch (e) { } ch = null; dmHandler = null; grpHandler = null; peer = null; group = null; panel = false; send = null; seen = new Set(); bub.clear(); dmIds.clear(); msgs.clear(); clearReply(); log.innerHTML = ''; lastIn = ''; chipsKind = ''; quick.hidden = true; quick.innerHTML = '';
         form.style.display = showForm ? '' : 'none'; if (placeholder) inp.placeholder = placeholder; ctx.setTitle('Chat');
       }
       const needSignIn = () => { reset(false); sysMsg('Sign in to chat with other players.'); };
@@ -203,13 +232,23 @@
         any: ['👍', 'Okay 👌', 'Nice! 🔥', 'I dey come', 'Alright'],
         room: ['Hi everyone 👋', 'Anyone around?', 'Good day, campus! 🎓', 'Who dey library?'], building: ['Hi everyone 👋', 'Nice place! 😍', 'Anyone here for a chat?'], dm: ['Hey! 👋', 'How far?', 'You dey? 😄'], group: ['Hi team 👋', 'What’s up?', 'Anyone free?']
       };
+      const hourNG = () => (new Date().getUTCHours() + 1) % 24;   // Nigeria time (WAT = UTC+1)
+      const timeGreet = () => { const h = hourNG(); return h >= 5 && h < 12 ? 'Good morning ☀️' : h >= 12 && h < 17 ? 'Good afternoon 🌤️' : h >= 17 && h < 22 ? 'Good evening 🌙' : 'Hello 🌙'; };
+      const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
       function pickChips() {
-        const t = lastIn.toLowerCase(), base = peer ? 'dm' : group ? 'group' : tab === 'building' ? 'building' : 'room';
-        if (!t) return QUICK[base];
+        const t = lastIn.toLowerCase(), base = peer ? 'dm' : group ? 'group' : tab === 'building' ? 'building' : 'room', tg = timeGreet(), neigh = !!(group && group.neighbour);
+        if (!t) return neigh ? [tg, 'Hi neighbours 👋', 'How una dey? 😄', 'Hope your day is going well 🙏'] : uniq([tg].concat(QUICK[base]));
         if (t === '__money__') return QUICK.money;
         if (/\b(thank|thanks|thx|tnx|appreciate)\b/.test(t)) return QUICK.thanks;
+        if (/\b(here you go|i sent|just sent|sent it|i got you|take it|you can have|i brought|brought you|i helped|it'?s on me|i('| wi)ll share|shared (it|the)|no wahala, (i|it))\b/.test(t)) return ['Thank you so much! 🙏', 'Thanks, I appreciate it 🙌', 'God bless you 🙏', 'You’re a star ⭐'];
+        if (/\bwelcome\b/.test(t) && !/you'?re welcome|you are welcome/.test(t)) return ['Thank you! 😊', 'Glad to be here 🙌', 'Happy to meet you all 👋'];
+        if (/\bgood ?night\b/.test(t)) return ['Good night 😴 sleep well', 'Night night 🌙', 'Sleep well! 💤'];
+        if (/\bgood morning\b|\bmorning\b/.test(t)) return ['Good morning! ☀️ Hope you slept well', 'Morning o! 😄', 'Good morning 🙏 have a great day'];
+        if (/\bgood afternoon\b|\bafternoon\b/.test(t)) return ['Good afternoon! 🌤️ How’s your day?', 'Afternoon o! 😄', 'Good afternoon 🙏'];
+        if (/\bgood evening\b|\bevening\b/.test(t)) return ['Good evening! 🌙 How was your day?', 'Evening o! 😄', 'Good evening 🙏'];
+        if (/\b(thank|thanks|thx|tnx|appreciate)\b/.test(t)) return QUICK.thanks;
         if (/\b(bye|goodnight|good night|see you|later|ttyl|cya)\b/.test(t)) return QUICK.bye;
-        if (/(^|\b)(hi|hello|hey|yo|howdy|sup|wassup|how far|good (morning|afternoon|evening|day)|what'?s up)\b/.test(t)) return QUICK.hello;
+        if (/(^|\b)(hi|hello|hey|yo|howdy|sup|wassup|how far|good day|what'?s up|how una dey)\b/.test(t)) return uniq([/^Good/.test(tg) ? tg : 'Hey! 👋'].concat(QUICK.hello));
         if (/(lol|lmao|haha|😂|🤣)/.test(t)) return QUICK.laugh;
         if (/\?|\b(where|when|what|who|why|how|can you|do you|are you|wanna|want to)\b/.test(t)) return QUICK.question;
         return QUICK.any;
@@ -224,14 +263,14 @@
       function submitText(t) {
         t = String(t || '').trim().slice(0, MAX); if (!t || !u || !send) return; quick.hidden = true;
         const plan = send(t); if (!plan) return;
-        if (plan.demo) { plan.demo(t); lastIn = ''; suggest(); return; }                      // demo mode: fake ticks, no server
+        if (plan.demo) { plan.demo(t); clearReply(); lastIn = ''; suggest(); return; }                      // demo mode: fake ticks, no server
         if (outbox.length >= OB_MAX) { Ph.toast('Too many unsent messages. Check your connection.'); return; }
-        const rec = { cid: uuid(), k: plan.k, n: plan.n, a: plan.a, scope: plan.scope, text: t, ts: Date.now() };
+        const rec = { cid: uuid(), k: plan.k, n: plan.n, a: plan.a, scope: plan.scope, text: t, ts: Date.now(), reply: plan.reply || null }; clearReply();
         outbox.push(rec); obSave(); outBubble(rec); deliver(rec); lastIn = ''; suggest();
       }
       /* demo mode only: walk a fake message through the ticks so you can see them */
       function demoOut(t, k, then) {
-        const rec = { cid: uuid(), k, text: t, ts: Date.now() }, b = outBubble(rec); const at = (ms, st) => setTimeout(() => { if (!dead) setStatus(b, st); }, ms);
+        const rec = { cid: uuid(), k, text: t, ts: Date.now(), reply: replyTo }, b = outBubble(rec); const at = (ms, st) => setTimeout(() => { if (!dead) setStatus(b, st); }, ms);
         at(350, 'sent'); if (k === 'd') { at(1300, 'delivered'); at(2600, 'seen'); } if (then) setTimeout(() => { if (!dead) then(); }, 900);
       }
       const num = (n) => '₦' + Number(n || 0).toLocaleString('en-NG');
@@ -367,7 +406,8 @@
         if (demo) { h('Your groups'); const l = list(); if (!demoGroups.length) { const n = document.createElement('div'); n.className = 'ph-note'; n.textContent = 'Demo groups stay on this device.'; log.appendChild(n); } demoGroups.forEach(d => l.appendChild(row(d.name, 'Tap to open', [], () => openGroup(d), { k: 'grp', id: d.id }))); return; }
         try {
           const m = await sb().from('group_members').select('group_id,status,role').eq('user_id', u.id).in('status', ['invited', 'member']); if (m.error) throw m.error; if (dead || tab !== 'groups' || group) return;
-          const ids = (m.data || []).map(x => x.group_id), info = {};
+          m.data = (m.data || []).filter(x => !(NB && x.group_id == NB.id)); const ids = (m.data || []).map(x => x.group_id), info = {};   // the neighbour group has its own tab
+          
           if (ids.length) { const gr = await sb().from('chat_groups').select('id,name').in('id', ids); if (gr.error) throw gr.error; (gr.data || []).forEach(x => { info[x.id] = x.name; }); }
           if (dead || tab !== 'groups' || group) return;
           const inv = (m.data || []).filter(x => x.status === 'invited'), mem = (m.data || []).filter(x => x.status === 'member');
@@ -377,14 +417,15 @@
         } catch (e) { sysMsg('Could not load groups: ' + nice(e)); }
       }
       async function openGroup(gr, addNow) {
-        reset(true, 'Message the group…'); group = gr; ctx.setTitle(gr.name || 'Group');
-        const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:.4em;align-self:stretch;flex-wrap:wrap'; bar.appendChild(mini('👥 People', () => openPanel('members'))); bar.appendChild(mini('＋ Add', () => openPanel('add'), 'gold')); bar.appendChild(mini('Leave', () => { if (!confirm('Leave this group?')) return; (demo ? Promise.resolve(demoGroups.splice(demoGroups.indexOf(gr), 1)) : rpc('leave_group', { p_group: gr.id })).then(() => setTab('groups')).catch(e => Ph.toast(nice(e))); })); log.appendChild(bar);
-        grpHandler = (r) => { if (group && r.group_id === group.id) { line({ id: r.id, username: r.username, body: r.body }, false, 'g'); if (canSee()) markGroup(group.id); else addGrp(group.id); return true; } return false; };
-        if (demo) { clearGrp(gr.id); sysMsg('Demo group — only you are here.'); send = () => ({ demo: (t) => demoOut(t, 'g') }); if (addNow) openPanel('add'); return; }
-        send = (t) => ({ k: 'g', n: 'send_group_message', a: { p_group: gr.id, p_body: t }, scope: 'g:' + gr.id });
+        reset(true, gr.neighbour ? 'Message your neighbours…' : 'Message the group…'); group = gr; ctx.setTitle((gr.neighbour ? '🏘️ ' : '') + (gr.name || 'Group'));
+        const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:.4em;align-self:stretch;flex-wrap:wrap'; bar.appendChild(mini('👥 People', () => openPanel('members'))); if (!gr.neighbour) { bar.appendChild(mini('＋ Add', () => openPanel('add'), 'gold')); bar.appendChild(mini('Leave', () => { if (!confirm('Leave this group?')) return; (demo ? Promise.resolve(demoGroups.splice(demoGroups.indexOf(gr), 1)) : rpc('leave_group', { p_group: gr.id })).then(() => setTab('groups')).catch(e => Ph.toast(nice(e))); })); } log.appendChild(bar);
+        if (gr.neighbour) { const n = document.createElement('div'); n.className = 'ph-note'; n.textContent = 'Your neighbours: a small group of players put together at random. Say hi with one tap, and use ↩ Reply under any message.'; log.appendChild(n); }
+        grpHandler = (r) => { if (group && r.group_id === group.id) { line({ id: r.id, user_id: r.user_id, username: r.username, body: r.body, reply_to: r.reply_to }, false, 'g'); if (canSee()) markGroup(group.id); else addGrp(group.id); return true; } return false; };
+        if (demo) { clearGrp(gr.id); send = () => ({ demo: (t) => demoOut(t, 'g') }); if (gr.neighbour) { line({ id: 'n1', username: 'tola', body: 'Good morning neighbours ☀️' }, false, 'g'); line({ id: 'n2', username: 'amaka', body: 'Morning! Who has a spare charger?' }, false, 'g'); } else sysMsg('Demo group — only you are here.'); suggest(); if (addNow) openPanel('add'); return; }
+        send = (t) => ({ k: 'g', n: 'send_group_message', a: Object.assign({ p_group: gr.id, p_body: t }, replyTo ? { p_reply_to: replyTo.id } : {}), scope: 'g:' + gr.id, reply: replyTo });
         try {
-          const { data, error } = await sel('group_messages', 'id,user_id,username,body,client_id,created_at', 'id,user_id,username,body,created_at', (q) => q.eq('group_id', gr.id).order('id', { ascending: false }).limit(40)); if (error) throw error; if (dead || !group || group.id !== gr.id) return;
-          (data || []).reverse().forEach(r => line(r, r.user_id === u.id, 'g')); if (!data || !data.length) sysMsg('No messages yet. Say hi 👋'); restorePending('g:' + gr.id, cidsOf(data)); if (canSee()) markGroup(gr.id);
+          const { data, error } = await sel('group_messages', 'id,user_id,username,body,client_id,created_at,reply_to', 'id,user_id,username,body,created_at', (q) => q.eq('group_id', gr.id).order('id', { ascending: false }).limit(40)); if (error) throw error; if (dead || !group || group.id !== gr.id) return;
+          (data || []).reverse().forEach(r => line(r, r.user_id === u.id, 'g')); if (!data || !data.length) sysMsg(gr.neighbour ? 'No messages yet. Be the first to say hello 👋' : 'No messages yet. Say hi 👋'); restorePending('g:' + gr.id, cidsOf(data)); suggest(); if (canSee()) markGroup(gr.id);
           ch = sb().channel('phone:grp:' + gr.id).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter: 'group_id=eq.' + gr.id }, (m) => { if (m.new) line(m.new, m.new.user_id === u.id, 'g'); }).subscribe();
         } catch (e) { sysMsg('Could not load the group: ' + nice(e)); }
         if (addNow) openPanel('add');
@@ -392,7 +433,7 @@
       /* People / Add panels replace the thread until you press Back */
       async function openPanel(kind) {
         const gr = group; if (!gr) return; panel = true; try { ch && ch.unsubscribe(); } catch (e) { } ch = null; grpHandler = null; form.style.display = 'none'; log.innerHTML = ''; ctx.setTitle(gr.name + (kind === 'add' ? ' · Add' : ' · People'));
-        if (kind === 'add') {
+        if (kind === 'add' && !gr.neighbour) {
           const s = document.createElement('label'); s.className = 'ph-search'; s.style.margin = '0'; s.style.alignSelf = 'stretch'; s.innerHTML = '<span style="width:1.1em;height:1.1em;display:inline-flex;flex:none;stroke:#9a927d;fill:none;stroke-width:2;stroke-linecap:round">' + I.search + '</span><input type="search" maxlength="20" placeholder="Search a username to invite" autocomplete="off">'; log.appendChild(s);
           const out = document.createElement('div'); out.style.alignSelf = 'stretch'; log.appendChild(out); const note = document.createElement('div'); note.className = 'ph-note'; note.textContent = 'They get an invite and must accept before they can see the group. Teens and adults can’t share a group.'; log.appendChild(note); const si = s.querySelector('input'); si.focus();
           si.oninput = () => { clearTimeout(searchT); const q = si.value.trim(); if (q.length < 2) { out.innerHTML = ''; return; } searchT = setTimeout(() => runSearch(q, out, (p, r) => r.appendChild(mini('Invite', (b) => { if (demo) { lock(b, 'Invited ✓'); return; } rpc('invite_to_group', { p_group: gr.id, p_user: p.user_id }).then(x => lock(b, x && x.status === 'member' ? 'In group' : 'Invited ✓')).catch(e => Ph.toast(nice(e))); }, 'gold'))), 300); };
@@ -423,7 +464,15 @@
       }
 
       /* ---- tabs, sending, lifecycle ---- */
-      function go(t) { tab = t; viewTab = t; if (t === 'campus' && U.campus) { U.campus = 0; refresh(); } ({ campus: () => openRoom(ROOM, 'Message the campus…'), building: () => openRoom(bld, 'Message this building…'), friends: openFriends, groups: openGroups })[t](); }
+      async function openNeighbours() {
+        if (!u) return needSignIn();
+        if (demo) return openGroup({ id: 'dnb', name: 'Neighbours 1', role: 'member', neighbour: true });
+        reset(false); sysMsg('Finding your neighbours…');
+        const nb = await ensureNb(); if (dead || tab !== 'neighbours') return;
+        reset(false); if (!nb) { sysMsg(nbMsg()); bigBtn('Try again', () => { nbErr = null; openNeighbours(); }, 'ghost'); return; }
+        openGroup({ id: nb.id, name: nb.name, role: 'member', neighbour: true });
+      }
+      function go(t) { tab = t; viewTab = t; if (t === 'campus' && U.campus) { U.campus = 0; refresh(); } ({ campus: () => openRoom(ROOM, 'Message the campus…'), neighbours: openNeighbours, building: () => openRoom(bld, 'Message this building…'), friends: openFriends, groups: openGroups })[t](); }
       function setTab(t) { tabs.forEach(x => x.classList.toggle('on', x.dataset.t === t)); go(t); }
       tabs.forEach(b => b.onclick = () => { if (b.dataset.t === 'building' && !bld) return; setTab(b.dataset.t); });
       form.onsubmit = (e) => {
@@ -434,22 +483,31 @@
       syncHook = () => { if (!dead && canSee()) { if (peer) markRead(peer.id); else if (group && !panel) markGroup(group.id); } };
       paint = () => {   // redraw the little numbers: tab badges + the rows on screen
         const setN = (t, n) => { const i = t && t.querySelector('.ph-tn'); if (i) { i.hidden = !n; i.textContent = capN(n); } };
-        setN(body.querySelector('[data-t=campus]'), U.campus | 0); setN(body.querySelector('[data-t=friends]'), sumOf(U.dms) + (U.alerts | 0)); setN(body.querySelector('[data-t=groups]'), sumOf(U.groups) + (U.invites | 0));
+        setN(body.querySelector('[data-t=campus]'), U.campus | 0); setN(body.querySelector('[data-t=friends]'), sumOf(U.dms) + (U.alerts | 0)); setN(body.querySelector('[data-t=groups]'), sumOf(U.groups) - nbUn() + (U.invites | 0)); setN(body.querySelector('[data-t=neighbours]'), nbUn());
         log.querySelectorAll('[data-u]').forEach(r => { const [k, id] = r.dataset.u.split(':'), n = ((k === 'dm' ? U.dms : U.groups)[id]) | 0, pl = r.querySelector('.ph-un'); if (pl) { pl.hidden = !n; pl.textContent = capN(n); pl.setAttribute('aria-label', n + ' unread'); } r.classList.toggle('has-un', !!n); });
       }; paint();
       const onUser = (nu) => { if (dead) return; u = nu; refreshBuilding(); setTab(tab === 'building' ? 'campus' : tab); }; Ph.on('user', onUser);
       const o = ctx.opts && ctx.opts.peer; startListeners(); refreshBuilding();
-      if (o) { tab = 'friends'; tabs.forEach(x => x.classList.toggle('on', x.dataset.t === 'friends')); openPeer(o); } else go('campus');
+      if (o) { tab = 'friends'; tabs.forEach(x => x.classList.toggle('on', x.dataset.t === 'friends')); openPeer(o); } else if (ctx.opts && ctx.opts.tab === 'neighbours') setTab('neighbours'); else go('campus');
       return {
         destroy() { dead = true; viewTab = null; paint = null; syncHook = null; if (hooks === H) hooks = null; tickHandler = null; clearTimeout(searchT); try { closeProfile(true); } catch (e) { } try { ch && ch.unsubscribe(); } catch (e) { } ch = null; dmHandler = null; grpHandler = null; },
         back() {   // one step back inside the app before the phone goes home
           if (profBox) { closeProfile(); return true; }
           if (panel && group) { const gr = group; panel = false; openGroup(gr); return true; }
+          if (group && group.neighbour) return false;   // the Neighbours chat is a top-level screen: Back goes to the phone home
           if (group) { setTab('groups'); return true; }
           if (peer) { setTab('friends'); return true; }
           return false;
         }
       };
     }
-  });
+  };
+  Ph.registerApp(CHAT);
+  /* the Neighbours home-screen app = the same screen, opened straight on the Neighbours tab */
+  Ph.registerApp(Object.assign({}, CHAT, {
+    id: 'neighbours', name: 'Neighbours',
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 11.2L8 6.8l5.2 4.4"/><path d="M4.3 10v8.2h7.4V10"/><path d="M12.8 13.4l4.2-3.4 4.2 3.4"/><path d="M14.2 12.6v5.6h5.6v-5.6"/><path d="M7 18.2v-3.4h2.6v3.4"/></svg>',
+    color: ['#e0a63a', '#9a6a12'],
+    mount(body, ctx) { ctx.opts = Object.assign({}, ctx.opts, { tab: 'neighbours' }); return CHAT.mount(body, ctx); }
+  }));
 })(window);

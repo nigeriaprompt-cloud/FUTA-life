@@ -170,3 +170,14 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ph-un[hidden],.ph-tn[hidden]{display:none}
 .ph-row.has-un .t b{color:var(--emerald)}.ph-row.has-un .t small{color:var(--ink);font-weight:600}
 .ph-tn{font-style:normal;display:inline-grid;place-items:center;vertical-align:middle;margin-left:.4em;min-width:1.6em;height:1.6em;padding:0 .45em;border-radius:1em;background:#e0483c;color:#fff;font-size:.75em;font-weight:700;line-height:1}
+
+/* ---- Neighbours + replies ---- */
+.ph-quote{margin:-.1em -.2em .35em;padding:.3em .6em;border-left:.22em solid var(--gold,#c9a24a);border-radius:.45em;background:rgba(0,0,0,.07);font-size:.82em;line-height:1.25;overflow:hidden}
+.ph-quote b{display:block;font-weight:700;color:var(--emerald2,#1e5a40)}.ph-quote span{display:block;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-msg.me .ph-quote{background:rgba(255,255,255,.16)}.ph-msg.me .ph-quote b{color:#f0d78c}
+.ph-rpb{display:block;margin:.35em 0 0;padding:.15em .1em;border:0;background:none;font:600 .74em system-ui,sans-serif;color:var(--emerald2,#1e5a40);opacity:.75;cursor:pointer}
+.ph-msg.me .ph-rpb{color:#f0d78c}.ph-rpb:hover,.ph-rpb:focus-visible{opacity:1;text-decoration:underline}
+.ph-replybar{flex:none;display:flex;align-items:center;gap:.5em;margin:0 .7em .3em;padding:.4em .7em;border-radius:.8em;background:#fff;border:1px solid var(--gold,#c9a24a);border-left-width:.3em;font-size:.84em}
+.ph-replybar[hidden]{display:none}.ph-replybar .ph-rp-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-replybar button{flex:none;width:1.9em;height:1.9em;border-radius:50%;border:0;background:rgba(0,0,0,.08);cursor:pointer}
+.ph-tabs button{position:relative}
