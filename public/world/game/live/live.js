@@ -132,12 +132,17 @@
     L.say = (text) => { if (!L.room) return Promise.reject(new Error('Not in a room yet.')); return call('send_room_message', { p_room: L.room, p_body: text }); };
 
     /* ---- seats ---- */
+    // Furniture ids look like 'chair#12:0' but the server only accepts [a-z0-9_:.-] (max 40 chars) — '#' made EVERY claim fail with bad_seat. Same mapping on both sides.
+    const seatKey = (id) => String(id).toLowerCase().replace(/[^a-z0-9_:.-]/g, '-').slice(0, 40);
     L.sit = async function (seatId) {
-      if (!L.room) throw new Error('Not in a room yet.'); const r = await call('claim_seat', { p_room: L.room, p_seat: seatId });
-      if (!r.ok) return false; seat = seatId; track(); clearInterval(seatTimer); seatTimer = setInterval(() => { call('claim_seat', { p_room: L.room, p_seat: seatId }).then(x => { if (!x.ok) L.stand(); }).catch(() => { }); }, CFG.seatRenewMs); return true;
+      for (let w = 0; !L.room && w < 20; w++) await new Promise(r => setTimeout(r, 200));   // the room is joined in the background after you enter: give it up to 4 s
+      if (!L.room) throw new Error('Still connecting to the room — try again in a moment.');
+      const sid = seatKey(seatId), room = L.room, r = await call('claim_seat', { p_room: room, p_seat: sid });
+      if (!r || !r.ok) { loadSeats(room).catch(() => { }); return false; }   // genuinely taken by someone else → refresh who is where
+      seat = seatId; track(); clearInterval(seatTimer); seatTimer = setInterval(() => { call('claim_seat', { p_room: room, p_seat: sid }).then(x => { if (!x || !x.ok) L.stand(); }).catch(() => { }); }, CFG.seatRenewMs); return true;
     };
     L.stand = async function () { clearInterval(seatTimer); if (!seat) return; seat = null; track(); await call('release_seat').catch(() => { }); };
-    L.seatTaken = (id) => L.seatsTaken.has(id) && L.seatsTaken.get(id) !== me.id;
+    L.seatTaken = (id) => { const k = seatKey(id); return L.seatsTaken.has(k) && L.seatsTaken.get(k) !== me.id; };
 
     /* ---- ATM / wallet (game money) ---- */
     L.wallet = () => call('get_wallet'); L.withdraw = (n) => call('atm_withdraw', { p_amount: n }); L.deposit = (n) => call('atm_deposit', { p_amount: n }); L.claimDaily = () => call('atm_claim_daily');

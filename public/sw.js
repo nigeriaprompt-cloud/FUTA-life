@@ -4,7 +4,7 @@
    - the cache is only a fallback when the network fails;
    - it never touches Supabase / Google / any other website, only files from this site, and only GET requests.
    To force every phone to drop its cache after a release, change VERSION. */
-const VERSION = 'futalife-v2';
+const VERSION = 'futalife-v3';
 const SHELL = ['/offline.html', '/brand/icon-192.png', '/brand/favicon.svg'];
 const MAX_ENTRIES = 150;
 

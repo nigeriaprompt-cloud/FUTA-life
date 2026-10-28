@@ -10,7 +10,7 @@ function fakeSb(selfId) {
       async track(m) { c.meta = m; bus.sync(name); }, send(msg) { (bus.channels[name] || []).forEach(o => { if (o.c !== c) o.c.h.filter(x => x.t === 'broadcast').forEach(x => x.cb({ payload: msg.payload })); }); return Promise.resolve(); },
       presenceState() { const s = {}; (bus.channels[name] || []).forEach(o => { if (o.c.meta) s[o.selfId] = [o.c.meta]; }); return s; } }; return c; },
     removeChannel(c) { for (const k in bus.channels) bus.channels[k] = bus.channels[k].filter(o => o.c !== c); bus.sync(c.name); return Promise.resolve(); },
-    rpc(fn, args) { bus.rpcs.push([selfId, fn, args]); if (fn === 'claim_seat') { const k = args.p_room + '/' + args.p_seat; if (bus.seats && bus.seats[k] && bus.seats[k] !== selfId) return Promise.resolve({ data: { ok: false } }); (bus.seats = bus.seats || {})[k] = selfId; return Promise.resolve({ data: { ok: true } }); } if (fn === 'list_seats') return Promise.resolve({ data: [] }); if (fn === 'get_wallet') return Promise.resolve({ data: { pocket: 500, bank: 100, canClaimDaily: true } }); return Promise.resolve({ data: null }); },
+    rpc(fn, args) { bus.rpcs.push([selfId, fn, args]); if (fn === 'claim_seat') { if (!/^[a-z0-9_:.-]{1,60}$/.test(args.p_room) || !/^[a-z0-9_:.-]{1,40}$/.test(args.p_seat)) return Promise.resolve({ error: { message: 'bad_seat' } }); const k = args.p_room + '/' + args.p_seat; if (bus.seats && bus.seats[k] && bus.seats[k] !== selfId) return Promise.resolve({ data: { ok: false } }); (bus.seats = bus.seats || {})[k] = selfId; return Promise.resolve({ data: { ok: true } }); } if (fn === 'list_seats') return Promise.resolve({ data: [] }); if (fn === 'get_wallet') return Promise.resolve({ data: { pocket: 500, bank: 100, canClaimDaily: true } }); return Promise.resolve({ data: null }); },
     from() { const q = { select() { return q; }, in(_, ids) { q.ids = ids; return q; }, eq() { return q; }, order() { return q; }, limit() { return Promise.resolve({ data: [] }); }, then(r) { r({ data: (q.ids || []).map(i => bus.profiles[i]).filter(Boolean), error: null }); } }; return q; } };
 }
 bus.sync = (name) => (bus.channels[name] || []).forEach(o => o.c.h.filter(x => x.t === 'presence').forEach(x => x.cb()));
@@ -53,5 +53,16 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   assert.strictEqual(await X.handle(8.1, 5.1), true, 'walks and sits'); assert.strictEqual(X.sitting, 'c1'); assert.ok(log.includes('pose:sit')); assert.ok(bus.rpcs.some(r => r[1] === 'claim_seat' && r[2].p_seat === 'c1'));
   await X.standUp(); assert.strictEqual(X.sitting, null); assert.ok(bus.rpcs.some(r => r[1] === 'release_seat'));
   bus.seats['int_lib_1/c2'] = 'someone-else'; AL.seatsTaken.set('c2', 'someone-else'); assert.strictEqual(await X.sitAt('c2'), false, 'taken seat refused'); assert.ok(log.some(l => l.startsWith('toast:Someone')));
+  // real furniture ids look like 'chair#12:0' — the server rule rejected '#' (bad_seat) and the player was told "Someone just sat there" for an EMPTY chair
+  const it2 = { ...it, seats: [{ id: 'chair#12:0', x: 8, z: 5, face: 0 }, { id: 'Sofa #3:1', x: 8, z: 6, face: 0 }] }; X.setInterior(it2); log.length = 0;
+  assert.strictEqual(await X.sitAt('chair#12:0'), true, "furniture id with '#' can be sat on"); assert.deepStrictEqual(log.filter(l => l.startsWith('toast:')), [], 'no toast on success'); assert.ok(bus.rpcs.some(r => r[1] === 'claim_seat' && r[2].p_seat === 'chair-12:0'), 'server gets a safe seat key');
+  assert.strictEqual(AL.seatTaken('chair#12:0'), false, 'my own seat is not "taken"'); await X.standUp();
+  assert.strictEqual(await X.sitAt('Sofa #3:1'), true, 'upper case + spaces are mapped too'); await X.standUp();
+  bus.seats['int_lib_1/chair-12:0'] = 'someone-else'; AL.seatsTaken.set('chair-12:0', 'someone-else'); assert.strictEqual(AL.seatTaken('chair#12:0'), true, 'another player on that chair is seen'); log.length = 0;
+  assert.strictEqual(await X.sitAt('chair#12:0'), false); assert.ok(log.some(l => l === 'toast:Someone is sitting there.'));
+  // a real error is reported as an error, never as "someone just sat there"
+  const AL2 = F.create({ sb: { ...fakeSb('B'), rpc: () => Promise.resolve({ error: { message: 'boom' } }) }, me: { id: 'B' } }); const X2 = G.FutaInteract.create({ live: AL2, player, toast: m => log.push('toast:' + m) }); X2.setInterior(it2); AL2.room = 'int_lib_1'; log.length = 0;
+  assert.strictEqual(await X2.sitAt('chair#12:0'), false); assert.ok(!log.some(l => /just sat/.test(l)), 'errors are not reported as "someone just sat there"'); assert.ok(log.some(l => l.startsWith('toast:')), 'but the player is told something');
+  console.log('ok  - furniture ids with # / spaces / capitals; errors are not "someone just sat there"');
   console.log('ok  - click chair → walk → sit; taken seat refused'); console.log('ALL LIVE TESTS PASSED');
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

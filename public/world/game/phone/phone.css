@@ -182,18 +182,21 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ph-replybar button{flex:none;width:1.9em;height:1.9em;border-radius:50%;border:0;background:rgba(0,0,0,.08);cursor:pointer}
 .ph-tabs button{position:relative}
 
-/* ---------- neighbour message notification slide-in (WhatsApp quick-reply from the shade) ---------- */
-.futa-nb-notif{position:fixed;z-index:99999;inset:0 0 auto 0;left:0;right:0;width:100%;padding:max(12px,env(safe-area-inset-top)) 16px max(12px,env(safe-area-inset-bottom)) 16px;
-  background:linear-gradient(180deg,#0a1410,#0c1020);color:#fff;font-size:.9em;transform:translateY(110%);transition:transform .3s cubic-bezier(.2,.85,.25,1);pointer-events:auto}
-.futa-nb-notif.show{transform:none}
-.futa-nb-head{display:flex;align-items:center;gap:.7em;margin-bottom:.5em}
-.futa-nb-from{font-weight:700;color:var(--gold2,#f0d78c);font-size:1em}
-.futa-nb-close{flex:none;width:2em;height:2em;border-radius:50%;border:1px solid rgba(255,255,255,.25);color:#fff;font-size:1.1em;line-height:1}
-.futa-nb-msg{padding:.6em .8em;border-radius:.8em;background:rgba(255,255,255,.08);border-left:.28em solid var(--gold,#c9a24a);font-size:.95em;line-height:1.35;margin-bottom:.5em;word-break:break-word}
-.futa-nb-input{display:flex;gap:.6em}
-.futa-nb-input input{flex:1;min-width:0;padding:.55em .8em;border-radius:.7em;border:1px solid rgba(255,255,255,.25);background:#0b1412;color:#fff;font-size:.9em}
-.futa-nb-input input::placeholder{color:rgba(255,255,255,.45)}
-.futa-nb-send{flex:none;padding:.55em 1em;border-radius:.7em;background:linear-gradient(135deg,var(--emerald2,#1e5a40),var(--emerald,#12392a));color:var(--gold2,#f0d78c);font-weight:700;font-size:.9em}
-.futa-nb-send:disabled{opacity:.55;cursor:not-allowed}
-.futa-nb-hint{margin-top:.35em;font-size:.78em;color:rgba(255,255,255,.6);font-style:italic}
-@media(max-width:480px){.futa-nb-notif{font-size:.85em}}
+/* ---------- heads-up notification with quick reply (P_.notify in phone.js) — lives inside the phone's shadow root ---------- */
+.ph-heads{position:fixed;z-index:96;top:max(10px,env(safe-area-inset-top));left:50%;width:min(94vw,380px);box-sizing:border-box;transform:translate(-50%,-170%);padding:.7em .8em .75em;border-radius:1.1em;border:1px solid #c9a24a;
+  background:linear-gradient(135deg,#1e5a40,#0d2a1e);color:#fbf8f1;box-shadow:0 12px 34px rgba(0,0,0,.5);font:14px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:transform .35s cubic-bezier(.2,.9,.3,1.1);pointer-events:none;visibility:hidden}
+.ph-heads.show{transform:translate(-50%,0);pointer-events:auto;visibility:visible}
+.ph-heads *{box-sizing:border-box}
+.ph-hd{display:flex;align-items:center;gap:.5em}.ph-hd i{font-style:normal;font-size:1.3em;flex:none}.ph-hd b{flex:1;min-width:0;font:700 1em Georgia,serif;color:#f0d78c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-hd em{font-style:normal;font-size:.75em;opacity:.7;flex:none}
+.ph-hx{flex:none;width:1.9em;height:1.9em;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:transparent;color:#fff;font-size:.9em;line-height:1;cursor:pointer}
+.ph-hm{margin:.45em 0 .1em;padding:.5em .7em;border-radius:.8em;background:rgba(255,255,255,.1);border-left:.25em solid #c9a24a;line-height:1.35;word-break:break-word;max-height:5.4em;overflow:auto;cursor:pointer;text-align:left}
+.ph-ha{display:flex;gap:.5em;margin-top:.5em}.ph-ha button{flex:1;padding:.5em .6em;border-radius:.7em;border:1px solid rgba(240,215,140,.5);background:rgba(255,255,255,.07);color:#f0d78c;font:600 .9em system-ui,sans-serif;cursor:pointer}
+.ph-heads.typing .ph-ha{display:none}
+.ph-hf{display:none;gap:.5em;margin-top:.5em}.ph-heads.typing .ph-hf{display:flex}
+.ph-hf input{flex:1;min-width:0;padding:.55em .75em;border-radius:.7em;border:1px solid rgba(255,255,255,.3);background:#0b1412;color:#fff;font-size:16px}
+.ph-hf input::placeholder{color:rgba(255,255,255,.5)}
+.ph-hf button{flex:none;padding:.5em 1em;border-radius:.7em;border:0;background:#c9a24a;color:#10231a;font-weight:700;cursor:pointer}
+.ph-hf button:disabled,.ph-hf input:disabled{opacity:.6}
+.ph-hs{min-height:0;font-size:.78em;margin-top:.3em;opacity:.85}.ph-hs:empty{display:none}.ph-hs.ok{color:#9be3b0}.ph-hs.bad{color:#ffb4a8}
+

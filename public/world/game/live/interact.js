@@ -60,7 +60,7 @@
         if (live.seatTaken(seatId)) { toast('Someone is sitting there.'); return false; }
         await C.standUp(); const tok = ++cancelTok, path = findPath(G, player.pos, { x: s.x, z: s.z }); if (!path) { toast('You can’t reach that seat.'); return false; }
         const arrived = await run(path, tok); if (!arrived || tok !== cancelTok) return false;
-        let ok = false; try { ok = await live.sit(seatId); } catch (e) { toast(e.message); }
+        let ok = false; try { ok = await live.sit(seatId); } catch (e) { toast((e && e.message) || 'Could not sit down — try again.'); return false; }   // a real error must not be reported as "someone sat there"
         if (!ok) { toast('Someone just sat there.'); return false; }
         player.teleport(s.x, s.z); player.face(s.face || 0); player.setPose('sit'); sittingOn = seatId; return true;
       },

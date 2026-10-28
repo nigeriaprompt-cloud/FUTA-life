@@ -59,6 +59,45 @@
     bannerEl.classList.remove('show'); void bannerEl.offsetWidth; bannerEl.classList.add('show'); clearTimeout(P_.alert.t); P_.alert.t = setTimeout(() => bannerEl && bannerEl.classList.remove('show'), 6000);
     if (a.vibrate !== false) { try { g.navigator.vibrate && g.navigator.vibrate([90, 60, 90]); } catch (e) { } }
   };
+  /* WhatsApp-style heads-up with quick reply.  P_.notify({ key, icon, title, body, count, placeholder, onOpen(), onRead(), onReply(text) -> Promise })
+     Shows a card at the top (even while the phone is hidden): who wrote, the message, and  Reply · Mark as read · ✕.  Reply opens an input right in the card, so the player
+     never has to open the app.  Calling it again with the same key while it is up just updates the text (and keeps whatever the player is typing).
+     It stays while the player is typing; otherwise it hides itself after ~9 s.  All text goes in with textContent.  P_.notifyHide(key) closes it (e.g. the chat is now open). */
+  let headsEl = null, headsT = null, headsA = null;
+  const headsBusy = () => !!(headsEl && (headsEl.classList.contains('typing') || headsEl.classList.contains('sending') || (headsEl.querySelector('input') || {}).value));
+  const headsTimer = () => { clearTimeout(headsT); headsT = setTimeout(() => { if (headsBusy() || (headsEl && headsEl.matches(':hover'))) headsTimer(); else P_.notifyHide(); }, 9000); };
+  P_.notifyHide = function (key) { if (!headsEl || (key != null && headsA && headsA.key !== key)) return; clearTimeout(headsT); const e = headsEl, x = headsA; e.classList.remove('show', 'typing', 'sending'); headsA = null; if (x && x.onHide) { try { x.onHide(); } catch (err) { } } const inp = e.querySelector('input'); if (inp) { inp.value = ''; inp.blur(); } };
+  P_.notify = function (a) {
+    if (!a || !a.title || !shadow) return;
+    if (!headsEl) {
+      headsEl = el('div'); headsEl.className = 'ph-heads'; headsEl.setAttribute('role', 'alert');
+      headsEl.innerHTML = '<div class="ph-hd"><i></i><b></b><em>now</em><button type="button" class="ph-hx" aria-label="Close">✕</button></div><div class="ph-hm" role="button" tabindex="0"></div><div class="ph-ha"><button type="button" class="ph-hr">↩ Reply</button><button type="button" class="ph-hk">✓ Mark as read</button></div><form class="ph-hf" autocomplete="off"><input type="text" maxlength="240" enterkeyhint="send"><button type="submit">Send</button></form><div class="ph-hs" aria-live="polite"></div>';
+      ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove', 'mousedown', 'dblclick', 'contextmenu', 'keydown', 'keyup', 'keypress'].forEach(ev => headsEl.addEventListener(ev, e => e.stopPropagation(), { passive: true }));   // typing here must never walk the character
+      shadow.appendChild(headsEl);
+      const q = (s) => headsEl.querySelector(s), inp = q('input'), st = q('.ph-hs');
+      q('.ph-hx').onclick = () => P_.notifyHide();
+      q('.ph-hm').onclick = () => { const x = headsA; P_.notifyHide(); if (x && x.onOpen) { P_.show(true); x.onOpen(); } };
+      q('.ph-hk').onclick = () => { const x = headsA; P_.notifyHide(); if (x && x.onRead) { try { x.onRead(); } catch (e) { } } };
+      q('.ph-hr').onclick = () => { headsEl.classList.add('typing'); clearTimeout(headsT); setTimeout(() => inp.focus(), 30); };
+      inp.addEventListener('focus', () => { headsEl.classList.add('typing'); clearTimeout(headsT); });
+      inp.addEventListener('blur', () => { if (!inp.value) { headsEl.classList.remove('typing'); if (headsEl.classList.contains('show')) headsTimer(); } });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Escape') { inp.value = ''; P_.notifyHide(); } });
+      q('.ph-hf').addEventListener('submit', async (e) => {
+        e.preventDefault(); const x = headsA, txt = inp.value.trim(); if (!x || !txt || headsEl.classList.contains('sending')) return;
+        headsEl.classList.add('sending'); inp.disabled = true; st.textContent = 'Sending…'; st.className = 'ph-hs';
+        try { await x.onReply(txt); inp.value = ''; st.textContent = 'Sent ✓'; st.className = 'ph-hs ok'; setTimeout(() => { if (headsA === x) P_.notifyHide(); }, 900); }
+        catch (err) { st.textContent = (err && err.message) || 'Could not send. Try again.'; st.className = 'ph-hs bad'; }
+        headsEl.classList.remove('sending'); inp.disabled = false; if (headsA === x && st.className.indexOf('bad') >= 0) inp.focus();
+      });
+    }
+    const same = headsA && headsA.key === a.key && headsEl.classList.contains('show'); headsA = a;
+    const q = (s) => headsEl.querySelector(s);
+    q('.ph-hd i').textContent = a.icon || '💬'; q('.ph-hd b').textContent = a.title; q('.ph-hm').textContent = a.body || ''; q('.ph-hd em').textContent = a.count > 1 ? a.count + ' new' : 'now';
+    q('input').placeholder = a.placeholder || 'Reply…'; q('.ph-hr').hidden = !a.onReply; q('.ph-hk').hidden = !a.onRead; q('.ph-hf').hidden = !a.onReply;
+    if (!same) { q('.ph-hs').textContent = ''; q('.ph-hs').className = 'ph-hs'; q('input').value = ''; headsEl.classList.remove('typing', 'sending'); }
+    headsEl.classList.add('show'); headsTimer();
+    if (!same && a.vibrate !== false) { try { g.navigator.vibrate && g.navigator.vibrate([90, 60, 90]); } catch (e) { } }
+  };
   P_.badge = function (id, n) { badges[id] = n | 0; buildHome(); const total = Object.values(badges).reduce((a, b) => a + b, 0); btn.classList.toggle('has', total > 0); btn.querySelector('.badge').textContent = total > 99 ? '99+' : total; };
   P_.api = () => g.FutaApi || null;
   P_.demo = () => !!(g.FUTA_CONFIG && g.FUTA_CONFIG.demo);
