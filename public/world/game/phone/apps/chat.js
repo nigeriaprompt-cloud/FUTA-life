@@ -114,7 +114,8 @@
       const sb = api.sb(), mk = (name, table, event, filter, fn) => { const o = { event, schema: 'public', table }; if (filter) o.filter = filter; chs.push(sb.channel('phone:' + name + ':' + u.id).on('postgres_changes', o, (m) => { if (m && m.new) fn(m.new); }).subscribe()); };
       mk('dm', 'dms', 'INSERT', 'recipient=eq.' + u.id, (r) => { markDelivered(); if (dmHandler && dmHandler(r)) return; if (r.kind === 'money') return; addDm(r.sender); });   // money has its own alert below
       mk('dmu', 'dms', 'UPDATE', 'sender=eq.' + u.id, (r) => { if (tickHandler) tickHandler(r); });   // my sent messages became delivered / seen
-      mk('nt', 'notifications', 'INSERT', 'user_id=eq.' + u.id, (r) => {   if (r.app) return;   // Global tags belong to the Global app. Someone sent you money: banner (even if the phone is hidden) + badge
+      mk('nt', 'notifications', 'INSERT', 'user_id=eq.' + u.id, (r) => {   if (r.app) return;   if (r.kind === 'neighbour') { showNbNotification(r); return; }   // neighbour: slide-in panel with quick reply, like WhatsApp from the notification shade
+        // Global tags belong to the Global app. Someone sent you money: banner (even if the phone is hidden) + badge
         Ph.alert({ icon: '💸', title: r.title, body: r.body || 'Tap to open the chat', app: 'chat', opts: r.from_user ? { peer: { id: r.from_user, username: String(r.title || '').split(' ')[0] } } : null });
         U.alerts++; refresh(); if (g.FutaChat && g.FutaChat.onMoney) g.FutaChat.onMoney(r);
       });
@@ -122,6 +123,49 @@
       mk('cr', 'room_messages', 'INSERT', 'room=eq.' + ROOM, (r) => { if (r.user_id === u.id) return; if (campusLooking()) { csSet(r.id); return; } U.campus++; refresh(); });   // someone spoke in Campus while I was elsewhere
       mk('gm', 'group_messages', 'INSERT', null, (r) => { if (r.user_id === u.id) return; if (grpHandler && grpHandler(r)) return; addGrp(r.group_id); });   // RLS: only messages from my groups arrive
     } catch (e) { console.warn('[phone chat]', e.message); }
+  }
+  /* ---------- neighbour message notification slide-in (WhatsApp quick-reply from the shade) ---------- */
+  let nbNotifEl = null, nbNotifMsg = null, nbNotifGrp = null, nbNotifSender = null, nbNotifFrom = null;
+  function showNbNotification(n) {
+    // n = { id, user_id, title, body, created_at }  (kind='neighbour', from_user = sender)
+    const from = n.from_user || n.user_id;
+    nbNotifSender = n.title || 'Neighbour';
+    nbNotifFrom = from;
+    nbNotifGrp = null;   // will resolve from the group_messages realtime listener if needed
+    const existing = document.getElementById('futaNbNotif');
+    if (existing) existing.remove();
+    nbNotifEl = document.createElement('div');
+    nbNotifEl.id = 'futaNbNotif';
+    nbNotifEl.className = 'futa-nb-notif';
+    nbNotifEl.innerHTML =
+      '<div class="futa-nb-head"><b class="futa-nb-from">' + esc(nbNotifSender) + '</b>' +
+      '<button class="futa-nb-close" type="button" aria-label="Close">✕</button></div>' +
+      '<div class="futa-nb-msg" id="futaNbMsg">' + esc(n.body || '') + '</div>' +
+      '<div class="futa-nb-input"><input id="futaNbReply" type="text" placeholder="Reply…" maxlength="240">' +
+      '<button class="futa-nb-send" type="button">Send</button></div>' +
+      '<div class="futa-nb-hint" id="futaNbHint"></div>';
+    nbNotifEl.querySelector('.futa-nb-close').onclick = () => hideNbNotification();
+    nbNotifEl.querySelector('.futa-nb-send').onclick = () => sendNbReply();
+    nbNotifEl.querySelector('#futaNbReply').onkeypress = (e) => { if (e.key === 'Enter') sendNbReply(); };
+    // tap anywhere outside the input closes the panel (but keep the input tappable)
+    nbNotifEl.onclick = (e) => { if (e.target.id === 'futaNbNotif') hideNbNotification(); };
+    (document.body || document.documentElement).appendChild(nbNotifEl);
+    setTimeout(() => nbNotifEl.classList.add('show'), 20);
+    nbNotifEl.querySelector('#futaNbReply').focus();
+  }
+  function hideNbNotification() { if (nbNotifEl) { nbNotifEl.classList.remove('show'); setTimeout(() => { nbNotifEl.remove(); nbNotifEl = null; nbNotifMsg = null; nbNotifGrp = null; nbNotifSender = null; nbNotifFrom = null; }, 220); } }
+  async function sendNbReply() {
+    const inp = nbNotifEl ? nbNotifEl.querySelector('#futaNbReply') : null;
+    if (!inp || !inp.value.trim()) return;
+    const txt = inp.value.trim(); inp.disabled = true;
+    const btn = nbNotifEl.querySelector('.futa-nb-send'); btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const api = Ph.api(); if (!api) throw new Error('Not signed in.');
+      // resolve my neighbour group id (it is cached in NB)
+      const grp = NB && NB.id ? NB.id : (await api.rpc('ensure_neighbours')).id;
+      await api.rpc('send_group_message', { p_group: grp, p_body: txt, p_reply_to: nbNotifMsg });
+      inp.value = ''; hideNbNotification(); Ph.toast('Replied to ' + nbNotifSender);
+    } catch (e) { inp.disabled = false; btn.disabled = false; btn.textContent = 'Send'; Ph.toast('Could not send: ' + nice(e)); }
   }
   Ph.on('user', (u) => { if (!u) { stopListeners(); outbox = []; } else startListeners(); });
   Ph.on('open', (id) => { chatOpen = id === 'chat' || id === 'neighbours'; if (chatOpen) syncSoon(); });   // counts are cleared per conversation as each one is opened

@@ -181,3 +181,19 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ph-replybar[hidden]{display:none}.ph-replybar .ph-rp-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ph-replybar button{flex:none;width:1.9em;height:1.9em;border-radius:50%;border:0;background:rgba(0,0,0,.08);cursor:pointer}
 .ph-tabs button{position:relative}
+
+/* ---------- neighbour message notification slide-in (WhatsApp quick-reply from the shade) ---------- */
+.futa-nb-notif{position:fixed;z-index:99999;inset:0 0 auto 0;left:0;right:0;width:100%;padding:max(12px,env(safe-area-inset-top)) 16px max(12px,env(safe-area-inset-bottom)) 16px;
+  background:linear-gradient(180deg,#0a1410,#0c1020);color:#fff;font-size:.9em;transform:translateY(110%);transition:transform .3s cubic-bezier(.2,.85,.25,1);pointer-events:auto}
+.futa-nb-notif.show{transform:none}
+.futa-nb-head{display:flex;align-items:center;gap:.7em;margin-bottom:.5em}
+.futa-nb-from{font-weight:700;color:var(--gold2,#f0d78c);font-size:1em}
+.futa-nb-close{flex:none;width:2em;height:2em;border-radius:50%;border:1px solid rgba(255,255,255,.25);color:#fff;font-size:1.1em;line-height:1}
+.futa-nb-msg{padding:.6em .8em;border-radius:.8em;background:rgba(255,255,255,.08);border-left:.28em solid var(--gold,#c9a24a);font-size:.95em;line-height:1.35;margin-bottom:.5em;word-break:break-word}
+.futa-nb-input{display:flex;gap:.6em}
+.futa-nb-input input{flex:1;min-width:0;padding:.55em .8em;border-radius:.7em;border:1px solid rgba(255,255,255,.25);background:#0b1412;color:#fff;font-size:.9em}
+.futa-nb-input input::placeholder{color:rgba(255,255,255,.45)}
+.futa-nb-send{flex:none;padding:.55em 1em;border-radius:.7em;background:linear-gradient(135deg,var(--emerald2,#1e5a40),var(--emerald,#12392a));color:var(--gold2,#f0d78c);font-weight:700;font-size:.9em}
+.futa-nb-send:disabled{opacity:.55;cursor:not-allowed}
+.futa-nb-hint{margin-top:.35em;font-size:.78em;color:rgba(255,255,255,.6);font-style:italic}
+@media(max-width:480px){.futa-nb-notif{font-size:.85em}}
