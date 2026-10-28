@@ -23,7 +23,7 @@
     whatsappChannel: 'https://whatsapp.com/channel/0029Vb8ycAzEgGfKUalSm62w',
     whatsappChat: '',
     chatText: 'Hello FUTAlife, I need help with something in the game.',
-    pollMs: 30000, pingMs: 60000
+    pollMs: 30000, pingMs: 60000, countsMs: 15000
   }, g.FUTA_COMMUNITY || {});
   const doc = g.document; if (!doc) return;
 
@@ -142,6 +142,7 @@
     doc.addEventListener('click', (e) => { if (!card.hidden && !card.contains(e.target) && e.target !== pill) open(false); });
     doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !card.hidden) open(false); });
     subs.push(() => { pill.hidden = !S.ok; num.textContent = fmt(S.players); if (!card.hidden) paintCard(false); });
+    startBuildingCounts();
     // step aside while the building zoom bar is showing (it sits in the same corner on phones)
     setInterval(() => { const c = doc.getElementById('cmp'); const busy = !!c && g.getComputedStyle(c).display !== 'none'; pill.classList.toggle('fo-hide', busy); if (busy && !card.hidden) open(false); }, 400);
   }
@@ -191,6 +192,27 @@
     return '<div class="ph-h">Community</div><div class="ph-list">' + (ch ? row(ch, 'Follow FUTAlife on WhatsApp', 'News, updates and help') : '') + (cu ? row(cu, 'Message us on WhatsApp', 'Questions, ideas or problems') : '') + '</div>';
   }
 
+  /* ---------- real headcount per building (map only) ----------
+     building_counts() (supabase/22_building_counts.sql) → { buildingId: n }.  Real data only: if the SQL is not installed, the network is down or
+     this is demo mode, ok stays false and the map shows no numbers at all. */
+  const BC = { ok: false, map: {} }, bcSubs = []; let bcOn = false, released = false;
+  async function refreshCounts() {
+    if (doc.hidden || isDemo()) return; const a = api(); if (!a) return;
+    try {
+      const P = g.FutaPhone, u = P && P.getUser && P.getUser();
+      if (u && !released) { released = true; try { await a.rpc('leave_building'); } catch (e) { /* ignore */ } }   // the map means you are outside: clears a building left behind by a closed tab
+      const d = await a.rpc('building_counts'); if (!d || typeof d !== 'object') return;
+      BC.ok = true; BC.map = d;
+    } catch (e) { return; }
+    bcSubs.forEach(f => { try { f(BC.map); } catch (e) { /* keep going */ } });
+  }
+  function startBuildingCounts() {
+    if (bcOn) return; bcOn = true; let n = 0;
+    const kick = () => { if (!isDemo() && !api() && n++ < 60) { setTimeout(kick, 500); return; } refreshCounts(); setInterval(refreshCounts, CFG.countsMs); };
+    setTimeout(kick, 800);
+    doc.addEventListener('visibilitychange', () => { if (!doc.hidden) refreshCounts(); });
+  }
+
   /* ---------- start ---------- */
   let started = false, tries = 0;
   function start() {
@@ -203,5 +225,5 @@
   const boot = () => { mountMap(); setTimeout(start, 600); };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot); else boot();
 
-  g.FutaCommunity = { config: CFG, get: () => Object.assign({}, S), on: (f) => { subs.push(f); }, refresh, ping, home, settingsHtml, channelUrl, chatUrl };
+  g.FutaCommunity = { config: CFG, get: () => Object.assign({}, S), on: (f) => { subs.push(f); }, counts: () => BC.map, onCounts: (f) => { bcSubs.push(f); if (BC.ok) f(BC.map); }, refreshCounts, refresh, ping, home, settingsHtml, channelUrl, chatUrl };
 })(window);

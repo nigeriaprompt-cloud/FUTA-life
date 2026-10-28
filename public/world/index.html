@@ -1440,7 +1440,7 @@ const PN=["morning","class hours","afternoon","evening","night"],PF=[[6,9],[9,14
 const per=()=>{const h=new Date(Date.now()+3600000).getUTCHours();return h>=6&&h<9?0:h>=9&&h<14?1:h>=14&&h<18?2:h>=18&&h<22?3:4};
 const hs=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h%1000)/50};
 const polyA=P=>{let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j][0]*P[i][1]-P[i][0]*P[j][1]);return Math.abs(a)/2};
-let L=[],key=null,byRec=new Map(),on=true,flt=null,q="",open=false,showAct=null;
+let CNT=null,L=[],key=null,byRec=new Map(),on=true,flt=null,q="",open=false,showAct=null;
 const layer=el("div",{style:"position:fixed;inset:0;pointer-events:none;z-index:4"});document.body.appendChild(layer);
 const adm=()=>ADMIN&&!PREVIEW;
 function build(){
@@ -1453,21 +1453,21 @@ function build(){
  chipRow();recount();list()}
 function capOf(l){const r=l.rec,k=K[l.k];let a;if(r._c)a=r._c.w*r._c.d*Math.max(1,((r.structure&&r.structure.floors)||1)*.7);else if(r._)a=polyA(r._);else a=k.ar*k.mn;return Math.max(k.mn,Math.min(k.mx,Math.round(a/k.ar)))}
 function recount(){
- const p=per(),t=Date.now();let sum=0;
- for(const l of L){const k=K[l.k],h=hs(l.name),w=1;const cp=capOf(l),dr=1+.22*Math.sin(t/45000+h)+.1*Math.sin(t/17000+h*2);l.n=Math.max(0,Math.min(cp,Math.round(cp*k.pf[p]*dr*w)));sum+=l.n;l.lv=k.pf[p]<.2?"Quiet":k.pf[p]<.5?"Calm":k.pf[p]<.75?"Busy":"Packed";
-  let left=l.n;l.parts=k.ac.map((a,i)=>{const c=i==k.ac.length-1?left:Math.round(l.n*a[1]);left-=c;return[a[0],Math.max(0,c)]});
-  l.b.querySelector("b").textContent=l.n>0?String(l.n):"";l.b.classList.toggle("z",!(l.n>0));l.b.title=l.n>0?l.name+" · "+l.n+(l.n==1?" person":" people")+" now":l.name;l.top=l.parts.slice().sort((a,b)=>b[1]-a[1])[0]}
+ let sum=0;const C=CNT||{};
+ for(const l of L){const id=l.rec.id||l.rec.name;l.n=Math.max(0,+C[id]||0);sum+=l.n;l.parts=[];l.top=null;
+  l.b.querySelector("b").textContent=l.n>0?String(l.n):"";l.b.classList.toggle("z",!(l.n>0));l.b.title=l.n>0?l.name+" · "+l.n+(l.n==1?" person":" people")+" inside now":l.name}
  ACT.sum=sum;paint()}
-function paint(){const s=ACT_S;if(s)s.textContent=`${L.length} places · ${PN[per()]}`;
- for(const l of L)if(l.live){l.live.s.textContent=sline(l);l.live.s.style.display=l.n>0?"":"none";l.live.d&&(l.live.d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · "))}}
-const sline=l=>l.n>0?`${l.n} ${l.n==1?"person":"people"} here now${l.top?" · mostly "+l.top[0].toLowerCase():""}`:"";
+function paint(){const s=ACT_S;if(s)s.textContent=L.length+" places";
+ for(const l of L)if(l.live){l.live.s.textContent=sline(l);l.live.s.style.display=l.n>0?"":"none"}
+ if(open)list()}
+const sline=l=>l.n>0?`${l.n} ${l.n==1?"person":"people"} inside now`:"";
 function pick(l){setSel(l.rec)}
 function block(p,o){const l=byRec.get(o);if(!l||adm())return;
- const d=el("p",{className:"m",style:"display:none"}),s=el("p",{className:"m",style:"color:var(--fg);font-weight:600"}),n=el("p",{className:"m"});
- l.live={s,d};s.textContent=sline(l);s.style.display=l.n>0?"":"none";d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · ");
- n.textContent=K[l.k].ds+" "+(o.needsVerification?"Location details still need verification. ":"")+"Headcounts are simulated in-game and follow the time of day.";
- p.append(el("p",{className:"m"},l.ic+" "+l.cat),s,n,d);
- return btn("Show activities",e=>{const v=d.style.display=="none";d.style.display=v?"block":"none";e.target.textContent=v?"Hide activities":"Show activities"})}
+ const s=el("p",{className:"m",style:"color:var(--fg);font-weight:600"}),n=el("p",{className:"m"});
+ l.live={s};s.textContent=sline(l);s.style.display=l.n>0?"":"none";
+ n.textContent=K[l.k].ds+" "+(o.needsVerification?"Location details still need verification. ":"")+"The number shows players who are inside right now.";
+ p.append(el("p",{className:"m"},l.ic+" "+l.cat),s,n);
+ return null}
 function areaPanel(p){const o=SEL,l=byRec.get(o);p.style.display="block";
  p.append(el("h3",{},o.name),el("p",{className:"m"},o.type+" area"));const b=block(p,o);
  p.append(el("div",{className:"row"},...[b,btn("Zoom in",()=>zoomTo(o)),btn("Close",closeSel)].filter(Boolean)))}
@@ -1498,7 +1498,7 @@ function frame(){if(key!==BLD)build();const hide=adm();fd.style.display=hide?"no
  for(const l of c){l.b.classList.toggle("nm",names);l.b.style.display="flex";const w=names?(l.w2||(l.w2=l.b.offsetWidth||110)):34,h=30,x0=l.sx-w/2,y0=l.sy-h-34;
   if(SEL!==l.rec&&boxes.some(q=>x0<q[2]&&x0+w>q[0]&&y0<q[3]&&y0+h>q[1])){l.b.style.display="none";continue}
   boxes.push([x0,y0,x0+w,y0+h]);l.b.style.transform=`translate(${l.sx|0}px,${l.sy|0}px) translate(-50%,-100%) translateY(-34px)`}}
-setInterval(()=>{if(!document.hidden&&L.length){recount();need=1}},6000);
+{const hook=()=>{const C=window.FutaCommunity;if(C&&C.onCounts){C.onCounts(m=>{CNT=m;if(L.length){recount();need=1}});return true}return false};if(!hook()){const t=setInterval(()=>{if(hook())clearInterval(t)},700)}}
 return{frame,block,areaPanel,has:o=>!adm()&&byRec.has(o),sum:0,_L:()=>L,_build:build,_search:v=>{q=v;list();return res},_cats:()=>(chipRow(),chips)}})();
 
 function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000);last=n;
@@ -1530,7 +1530,7 @@ function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000
   const ld = document.getElementById("load");
   if (ld) ld.remove();
 })();
-</script><script src="game/interiors/hook.js"></script><script src="game/community/community.js" defer></script>
+</script><script src="game/interiors/splash.js"></script><script src="game/interiors/hook.js"></script><script src="game/community/community.js" defer></script>
 <script src="game/celebrate/celebrate.js" defer></script><script src="game/celebrate/celebrate-map.js" defer></script>
 <!-- FUTA Phone overlay (chat, settings/log out, property, cars, clothes, accessories). Self-contained; see game/phone/README.md -->
 <script src="game/phone/phone.js" defer></script>
