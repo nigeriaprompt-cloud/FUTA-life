@@ -73,7 +73,7 @@ p.m{letter-spacing:.01em}
 /* owner request: campus search sits top-centre (replaces the FUTA region buttons) so it never covers the Enter bar */
 html.player #find{left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px))}
 /* owner request: only the reset (⌖) button stays on the right; no + / − / shadow buttons and no sun/time badge (pinch / scroll still zoom). Delete this rule to bring them back. */
-#zi,#zo,#shd,#clk{display:none!important}
+#shd,#clk{display:none!important}
 /* look & feel pass: one style for map buttons. Additive only; admin editor keeps its own layout. */
 #nav{background:var(--bg);background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:999px;padding:4px;gap:4px;scrollbar-width:none}
 #nav::-webkit-scrollbar{display:none}#nav:empty{display:none}
@@ -89,10 +89,22 @@ html.player #find{left:50%;transform:translateX(-50%);top:calc(10px + env(safe-a
 #panel button.pri,#modal button.pri{background:var(--ac);color:#f6efdc}
 #find>button.pri{border-radius:999px;min-height:36px;padding:0 14px;font-weight:600}
 #hint{display:none!important}
+
+/* map controls: logo + zoom in / out + reset camera, with crisp SVG icons */
+#zoom{gap:3px;align-items:center;padding:6px;border-radius:18px}
+#zoom .zlogo{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:var(--ac);margin-bottom:2px;box-shadow:inset 0 -2px 0 var(--gold)}
+#zoom .zlogo img{width:28px;height:28px;display:block;border-radius:6px}
+#zoom .zsep{width:26px;height:1px;background:var(--ln);margin:2px 0}
+#zoom button svg{width:20px;height:20px;display:block;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#zoom button:active{transform:scale(.94)}
+/* live headcount on map labels: a number only, nothing when the building is empty */
+.am b{min-width:18px;text-align:center;font-variant-numeric:tabular-nums;font-size:12px}
+.am b::before{content:"\1F465";font-size:10px;margin-right:3px;filter:grayscale(.2)}
+.am b:empty{display:none}.am.z:not(.nm){padding:3px}
 </style>
 <div id="load" role="status" aria-live="polite"><div class="ld-box"><div class="ld-t">FUTAlife</div><div class="ld-bar"><i id="ldFill"></i></div><div class="ld-row"><span id="ldMsg">Loading world…</span><b id="ldPct">0%</b></div></div></div><div class="card" id="nav"></div>
 <div id="hint">Drag to move · pinch or scroll to zoom · twist to rotate · tap a building to zoom in</div>
-<div class="card" id="zoom"><button id="zi">+</button><button id="zo">−</button><button id="nr" title="Reset north">⌖</button><button id="shd" title="Toggle shadows">◐</button></div>
+<div class="card" id="zoom"><div class="zlogo" aria-hidden="true"><img src="/brand/favicon.svg" alt=""></div><div class="zsep"></div><button id="zi" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="zo" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><div class="zsep"></div><button id="nr" title="Reset camera view" aria-label="Reset camera view"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button><button id="shd" title="Toggle shadows">◐</button></div>
 <div class="card" id="panel"></div><div class="card" id="adm"></div><div class="card" id="props"></div><div class="card" id="modal"></div><div class="card" id="toast"></div>
 <script src="vendor/three.min.js"></script>
 <script src="game/interior/clock.js"></script>
@@ -1442,18 +1454,18 @@ function build(){
 function capOf(l){const r=l.rec,k=K[l.k];let a;if(r._c)a=r._c.w*r._c.d*Math.max(1,((r.structure&&r.structure.floors)||1)*.7);else if(r._)a=polyA(r._);else a=k.ar*k.mn;return Math.max(k.mn,Math.min(k.mx,Math.round(a/k.ar)))}
 function recount(){
  const p=per(),t=Date.now();let sum=0;
- for(const l of L){const k=K[l.k],h=hs(l.name),w=1;l.n=Math.max(0,Math.round(capOf(l)*k.pf[p]*w));sum+=l.n;l.lv=k.pf[p]<.2?"Quiet":k.pf[p]<.5?"Calm":k.pf[p]<.75?"Busy":"Packed";
+ for(const l of L){const k=K[l.k],h=hs(l.name),w=1;const cp=capOf(l),dr=1+.22*Math.sin(t/45000+h)+.1*Math.sin(t/17000+h*2);l.n=Math.max(0,Math.min(cp,Math.round(cp*k.pf[p]*dr*w)));sum+=l.n;l.lv=k.pf[p]<.2?"Quiet":k.pf[p]<.5?"Calm":k.pf[p]<.75?"Busy":"Packed";
   let left=l.n;l.parts=k.ac.map((a,i)=>{const c=i==k.ac.length-1?left:Math.round(l.n*a[1]);left-=c;return[a[0],Math.max(0,c)]});
-  l.b.querySelector("b").textContent=l.lv;l.top=l.parts.slice().sort((a,b)=>b[1]-a[1])[0]}
+  l.b.querySelector("b").textContent=l.n>0?String(l.n):"";l.b.classList.toggle("z",!(l.n>0));l.b.title=l.n>0?l.name+" · "+l.n+(l.n==1?" person":" people")+" now":l.name;l.top=l.parts.slice().sort((a,b)=>b[1]-a[1])[0]}
  ACT.sum=sum;paint()}
 function paint(){const s=ACT_S;if(s)s.textContent=`${L.length} places · ${PN[per()]}`;
- for(const l of L)if(l.live){l.live.s.textContent=sline(l);l.live.d&&(l.live.d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · "))}}
-const sline=l=>`${l.lv} right now${l.top?" · mostly "+l.top[0].toLowerCase():""} (${PN[per()]})`;
+ for(const l of L)if(l.live){l.live.s.textContent=sline(l);l.live.s.style.display=l.n>0?"":"none";l.live.d&&(l.live.d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · "))}}
+const sline=l=>l.n>0?`${l.n} ${l.n==1?"person":"people"} here now${l.top?" · mostly "+l.top[0].toLowerCase():""}`:"";
 function pick(l){setSel(l.rec)}
 function block(p,o){const l=byRec.get(o);if(!l||adm())return;
  const d=el("p",{className:"m",style:"display:none"}),s=el("p",{className:"m",style:"color:var(--fg);font-weight:600"}),n=el("p",{className:"m"});
- l.live={s,d};s.textContent=sline(l);d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · ");
- n.textContent=K[l.k].ds+" "+(o.needsVerification?"Location details still need verification. ":"")+"Busy levels are in-game and follow the time of day.";
+ l.live={s,d};s.textContent=sline(l);s.style.display=l.n>0?"":"none";d.textContent=l.parts.filter(a=>a[1]>0).map(a=>a[0]).join(" · ");
+ n.textContent=K[l.k].ds+" "+(o.needsVerification?"Location details still need verification. ":"")+"Headcounts are simulated in-game and follow the time of day.";
  p.append(el("p",{className:"m"},l.ic+" "+l.cat),s,n,d);
  return btn("Show activities",e=>{const v=d.style.display=="none";d.style.display=v?"block":"none";e.target.textContent=v?"Hide activities":"Show activities"})}
 function areaPanel(p){const o=SEL,l=byRec.get(o);p.style.display="block";
@@ -1469,7 +1481,7 @@ function list(){if(!res.isConnected&&!fd.isConnected)return;res.replaceChildren(
  if(!flt&&q){const have=new Set(r.map(x=>x.rec));for(const o of BLD.concat(ARE))if(!have.has(o)&&o.type!="house"&&vis(o)&&(o.name||"").toLowerCase().includes(q))r.push({rec:o,name:o.name,sub:o.type})}
  r.sort((a,b)=>(b.l?1:0)-(a.l?1:0)||a.name.localeCompare(b.name));
  if(!r.length){res.append(el("p",{className:"m"},"No matching locations."));return}
- r.slice(0,14).forEach(x=>res.append(el("button",{className:"fr",onclick:()=>{zoomTo(x.rec);setSel(x.rec);open=false;fd.classList.add("min")}},el("span",{},x.name),el("small",{},x.sub+(x.l?" · "+x.l.lv:"")))));
+ r.slice(0,14).forEach(x=>res.append(el("button",{className:"fr",onclick:()=>{zoomTo(x.rec);setSel(x.rec);open=false;fd.classList.add("min")}},el("span",{},x.name),el("small",{},x.sub+(x.l&&x.l.n>0?" · \u{1F465} "+x.l.n:"")))));
  if(r.length>14)res.append(el("p",{className:"m"},`+${r.length-14} more — refine your search`))}
 box.append(el("div",{className:"row"},mk),inp,chips,sumEl,res);fd.classList.add("min");fd.append(tg,box);document.body.appendChild(fd);document.documentElement.classList.toggle("player",!window.PTW.admin);
 /* per-frame marker placement: zoom-aware, declutters overlaps, hidden in editor mode */
