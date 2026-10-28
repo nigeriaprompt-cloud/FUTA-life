@@ -47,6 +47,7 @@
     } catch (e) { console.warn('[phone global]', e.message); }
   }
   Ph.on('user', (u) => { if (!u) stop(); else start(); });
+  if (Ph.getUser()) start();   // the player may already be known by the time this file finishes loading (apps load in parallel with sign-in)
 
   /* ---------- demo seed ---------- */
   const DEMO = [['Tola', 'Anyone heading to the library?'], ['Amaka', 'Cafeteria jollof is sold out again 😩'], ['Segun', '@amaka the new place by the gate has rice 👀'], ['Amaka', '@segun you are a lifesaver']];
