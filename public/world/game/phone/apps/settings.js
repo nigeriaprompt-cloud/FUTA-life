@@ -148,7 +148,7 @@
           if (a === 'signin') { location.href = (Ph.loginUrl ? Ph.loginUrl() : Ph.SIGNUP_URL); return; }
           if (a === 'campus') return campusSheet();
           if (a === 'look') { location.href = (Ph.loginUrl ? Ph.loginUrl() : Ph.SIGNUP_URL) + '?stay'; return; }
-          if (a === 'install') { g.FutaInstall.prompt().then(r => { if (r === 'accepted') Ph.toast('FUTAlife installed'); else if (r === 'ios') Ph.toast('Tap Share, then Add to Home Screen'); render(); }); return; }
+          if (a === 'install') { g.FutaInstall.prompt().then(r => { if (r === 'accepted') Ph.toast('FUTAlife installed'); else if (r === 'ios') Ph.toast('Tap Share, then Add to Home Screen'); else if (r === 'manual') Ph.toast('Chrome menu ⋮ → Install app'); else if (r === 'inapp') Ph.toast('Open this link in Chrome to install'); render(); }); return; }
           if (a === 'auto') { const on = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', on); b.querySelector('.ph-sw').setAttribute('aria-checked', on); Ph.store.set('auto', on); return; }
           if (a === 'waves' && u) {
             const on = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', on); b.querySelector('.ph-sw').setAttribute('aria-checked', on);

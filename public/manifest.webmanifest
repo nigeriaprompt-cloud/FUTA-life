@@ -5,7 +5,7 @@
   "description": "Your campus. Your Lagos life. Walk FUTA Akure, meet people, hustle and live it.",
   "lang": "en-NG",
   "dir": "ltr",
-  "start_url": "/world/game/onboarding/signup?source=pwa",
+  "start_url": "/world/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

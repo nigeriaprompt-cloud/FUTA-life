@@ -12,15 +12,21 @@
   const standalone = () => (g.matchMedia && g.matchMedia('(display-mode: standalone)').matches) || g.navigator.standalone === true;
   const ua = g.navigator.userAgent || '', ios = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && g.navigator.maxTouchPoints > 1);
   const safari = ios && /safari/i.test(ua) && !/crios|fxios|edgios|opios/i.test(ua);
+  /* Opened inside WhatsApp / Instagram / Facebook / TikTok / Telegram etc.? Those in-app browsers can NEVER install a web app, so we tell the person to open the link in Chrome. */
+  const inapp = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|musical_ly|TikTok|BytedanceWebview|Snapchat|Telegram|Twitter|LinkedInApp|MicroMessenger|; wv\)|GSA\//i.test(ua);
+  const mobile = /android|iphone|ipad|ipod|mobile/i.test(ua) || g.navigator.maxTouchPoints > 1;
   let deferred = null; const subs = [];
   const emit = () => subs.forEach(f => { try { f(FI.state()); } catch (e) { } });
 
   const FI = g.FutaInstall = {
-    state() { if (standalone()) return 'installed'; if (deferred) return 'available'; if (ios) return 'ios'; return 'unavailable'; },
+    state() { if (standalone()) return 'installed'; if (inapp && !ios) return 'inapp'; if (deferred) return 'available'; if (ios) return 'ios'; return mobile ? 'manual' : 'unavailable'; },
     onChange(f) { subs.push(f); },
     async prompt() {
       if (deferred) { const d = deferred; deferred = null; d.prompt(); let r = 'dismissed'; try { r = (await d.userChoice).outcome; } catch (e) { } emit(); return r; }
-      if (ios && !standalone()) { showCard('ios', true); return 'ios'; }
+      if (standalone()) return 'installed';
+      if (inapp && !ios) { showCard('inapp', true); return 'inapp'; }
+      if (ios) { showCard('ios', true); return 'ios'; }
+      if (mobile) { showCard('manual', true); return 'manual'; }      // Chrome has not offered its one-tap prompt (yet): show the manual steps
       return 'unavailable';
     }
   };
@@ -36,6 +42,7 @@
   /* ---------- the little install card (sign-up page only) ---------- */
   let host = null;
   const onSignup = /\/onboarding\/signup/.test(g.location.pathname) || g.location.pathname === '/join';
+  const onMap = /^\/world\/?$/.test(g.location.pathname);
   function hideCard() { if (host) { host.remove(); host = null; } }
   function showCard(mode, force) {
     if (host || standalone()) return;
@@ -44,14 +51,16 @@
       'background:linear-gradient(135deg,#1e5a40,#0d2a1e);border:1px solid #d9ac35;box-shadow:0 14px 40px #000a;color:#fbf8f1;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;animation:u .4s cubic-bezier(.2,.9,.3,1.1)}' +
       '@keyframes u{from{transform:translateY(120%);opacity:0}}img{width:46px;height:46px;border-radius:12px;flex:none}.t{flex:1;min-width:0}b{display:block;font:700 15px Georgia,serif;color:#fbeaa8}span{opacity:.85;font-size:12.5px}' +
       'button{font:inherit;cursor:pointer;border:0}.go{padding:10px 16px;border-radius:12px;font-weight:700;background:linear-gradient(135deg,#fbeaa8,#d9ac35);color:#2b1f05}.x{width:30px;height:30px;border-radius:50%;background:#ffffff1f;color:#fff;font-size:18px;line-height:1;flex:none}</style>' +
-      '<div class="c" role="dialog" aria-label="Install FUTAlife"><img alt="" src="/brand/icon-192.png"><div class="t"><b>Install FUTAlife</b><span></span></div>' + (mode === 'ios' ? '' : '<button class="go" type="button">Install</button>') + '<button class="x" type="button" aria-label="Close">×</button></div>';
-    const msg = sr.querySelector('span'); msg.textContent = mode === 'ios' ? 'Tap the Share button, then “Add to Home Screen”.' : 'Add it to your home screen for full-screen play.';
-    const go = sr.querySelector('.go'); if (go) go.onclick = () => FI.prompt().then(() => hideCard());
+      '<div class="c" role="dialog" aria-label="Install FUTAlife"><img alt="" src="/brand/icon-192.png"><div class="t"><b>Install FUTAlife</b><span></span></div>' + (mode === 'android' ? '<button class="go" type="button">Install</button>' : mode === 'inapp' ? '<button class="go" type="button">Copy link</button>' : '') + '<button class="x" type="button" aria-label="Close">×</button></div>';
+    const msg = sr.querySelector('span'); msg.textContent = mode === 'ios' ? 'Tap the Share button, then “Add to Home Screen”.' : mode === 'inapp' ? 'This app cannot install it. Copy the link, open it in Chrome, then tap Install.' : mode === 'manual' ? 'In Chrome tap the ⋮ menu, then “Install app” (or “Add to Home screen”).' : 'Add it to your home screen for full-screen play.';
+    const go = sr.querySelector('.go');
+    if (go && mode === 'inapp') go.onclick = () => { const u = g.location.origin + '/join'; const done = () => { go.textContent = 'Copied ✓'; }; try { g.navigator.clipboard.writeText(u).then(done, () => { g.prompt('Copy this link:', u); }); } catch (e) { g.prompt('Copy this link:', u); } };
+    else if (go) go.onclick = () => FI.prompt().then(() => hideCard());
     sr.querySelector('.x').onclick = () => { store.set('dismiss', String(Date.now())); hideCard(); };
   }
   function maybeCard() {
-    if (!onSignup || standalone() || store.get('installed')) return; const d = +store.get('dismiss') || 0; if (Date.now() - d < 7 * 864e5) return;
-    const st = FI.state(); if (st === 'available') setTimeout(() => showCard('android'), 1500); else if (st === 'ios' && safari) setTimeout(() => showCard('ios'), 2500);
+    if (!(onSignup || onMap) || standalone() || store.get('installed')) return; const d = +store.get('dismiss') || 0; if (Date.now() - d < 7 * 864e5) return;
+    const st = FI.state(); if (st === 'available') setTimeout(() => showCard('android'), 1500); else if (st === 'ios' && safari) setTimeout(() => showCard('ios'), 2500); else if (st === 'inapp' && onSignup) setTimeout(() => showCard('inapp'), 1500);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeCard); else maybeCard();
 
