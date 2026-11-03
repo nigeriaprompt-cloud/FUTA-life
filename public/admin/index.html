@@ -49,6 +49,12 @@ tr:last-child td{border-bottom:0}.pos{color:var(--ok)}.neg{color:var(--bad)}
 .cf label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--mut)}.cf input,.cf select{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:15px;min-height:44px;width:100%}
 .prev{--c1:#0f2b5b;--c2:#2c4f86;--c3:#c9a24a;--c4:#f0d78c;display:flex;gap:10px;align-items:center;padding:8px;border-radius:999px;color:#fff;background:linear-gradient(120deg,var(--c1),var(--c2));border:1px solid var(--c3);margin-bottom:12px;box-shadow:inset 0 0 0 3px #ffffff12}.prev .ic{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:19px;background:radial-gradient(circle at 30% 25%,var(--c4),var(--c3))}.prev b{display:block;font:600 14px Georgia,serif;color:var(--c4)}.prev span{display:block;font-size:12.5px;opacity:.92}
 .cb{display:flex;gap:8px;flex-wrap:wrap}.cb .btn{flex:1;min-width:150px;min-height:46px}
+/* send money card */
+.mny{margin-bottom:12px;border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}.mny h3{margin:0 0 4px;font-size:16px}.mny .sub{color:var(--mut);font-size:13px;margin:4px 0 12px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.seg button{padding:11px 8px;border-radius:14px;border:1.5px solid var(--line);background:var(--card2);color:var(--text);cursor:pointer;font-weight:700;min-height:46px}.seg button[aria-checked=true]{border-color:var(--gold);box-shadow:0 0 0 3px #f5c54233;background:color-mix(in srgb,var(--card2) 85%,var(--gold))}
+.mny .cf input{width:100%}.qk{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 12px}.qk button{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:999px;padding:7px 12px;min-height:36px;cursor:pointer;font-size:13.5px}
+.mny .info{color:var(--mut);font-size:13px;margin-bottom:10px}.mny .conf{border:1.5px solid var(--gold);background:color-mix(in srgb,var(--card2) 90%,var(--gold));border-radius:14px;padding:12px;margin-bottom:10px}.mny .conf p{margin:0 0 10px;line-height:1.45}
+.mny .hist{margin-top:14px}.mny .hist h4{margin:0 0 6px;font-size:13px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 [hidden]{display:none!important}
 @media(max-width:520px){.btn{flex:1}td,th{padding:7px 2px}table{font-size:13.5px}}
 </style></head>
@@ -72,6 +78,22 @@ tr:last-child td{border-bottom:0}.pos{color:var(--ok)}.neg{color:var(--bad)}
     <div class="prev" id="celPrev" aria-label="Preview"><div class="ic" id="celPIc"></div><div><b id="celPT"></b><span id="celPM"></span></div></div>
     <div class="cb"><button class="btn gold" id="celOn" type="button">Turn ON</button><button class="btn" id="celOff" type="button">Turn OFF</button></div>
     <div id="celNote" class="msg" role="status"></div>
+  </div>
+  <div class="card mny" id="mny">
+    <h3>💸 Send money</h3>
+    <div class="sub">Give players game money. It is added to their <b>bank</b> (they withdraw it at an ATM) and they get a phone alert. Nothing is taken from anyone. Every send is recorded.</div>
+    <div class="seg" id="mnMode" role="radiogroup" aria-label="Who gets the money"><button type="button" role="radio" data-m="one" aria-checked="true">One player</button><button type="button" role="radio" data-m="all" aria-checked="false">All players</button></div>
+    <div class="cf">
+      <label id="mnUserW">Username<input id="mnUser" maxlength="21" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. tola_ade"></label>
+      <label>Amount (₦, each player)<input id="mnAmt" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="e.g. 5000"></label>
+      <label>Note (optional, shown in their alert)<input id="mnNote" maxlength="80" autocomplete="off" placeholder="e.g. Happy Founders Day"></label>
+    </div>
+    <div class="qk" id="mnQuick" aria-label="Quick amounts"><button type="button" data-v="1000">₦1,000</button><button type="button" data-v="5000">₦5,000</button><button type="button" data-v="10000">₦10,000</button><button type="button" data-v="50000">₦50,000</button><button type="button" data-v="100000">₦100,000</button></div>
+    <div class="info" id="mnInfo"></div>
+    <div class="conf" id="mnConf" hidden><p id="mnConfTxt"></p><div class="cb"><button class="btn gold" id="mnSend" type="button">Yes, send it</button><button class="btn" id="mnCancel" type="button">Cancel</button></div></div>
+    <div class="cb" id="mnGo"><button class="btn gold" id="mnReview" type="button">Review</button></div>
+    <div id="mnNote2" class="msg" role="status"></div>
+    <div class="hist"><h4>Recent sends</h4><div id="mnHist"></div></div>
   </div>
   <div class="grid" id="tiles"></div>
   <div class="cols"><div class="card"><h3>New players · last 14 days</h3><div id="chSign"></div></div><div class="card"><h3>Money moves per hour · last 24 h</h3><div id="chHour"></div></div></div>
@@ -164,7 +186,7 @@ tr:last-child td{border-bottom:0}.pos{color:var(--ok)}.neg{color:var(--bad)}
         else showGate('Enter the admin password.', (ERR[e] || ERR.failed) + (e === 'bad_password' && m.triesLeft != null ? ' ' + m.triesLeft + ' tries left.' : ''));
         return;
       }
-      $('gate').hidden = true; $('dash').hidden = false; $('demoNote').hidden = !demo; celInit(); render(m);
+      $('gate').hidden = true; $('dash').hidden = false; $('demoNote').hidden = !demo; celInit(); moneyInit(); render(m);
       clearInterval(timer); timer = setInterval(function () { if (!document.hidden) load(false); }, 30000);
     } catch (e) { if (first) showGate('Enter the admin password.', ERR.failed); }
     finally { busy = false; $('refresh').disabled = false; }
@@ -213,6 +235,74 @@ tr:last-child td{border-bottom:0}.pos{color:var(--ok)}.neg{color:var(--bad)}
       CEL.touched = false; await FC.refresh(); note.className = 'msg ok'; note.textContent = on ? 'Celebration is ON. Players see it within a minute.' : 'Celebration is OFF.'; celStatus();
     } catch (e) { note.textContent = CERR[e.message] || (e.message === 'not_installed' ? 'Run supabase/18_celebrations.sql in Supabase first.' : 'Could not save. Check your connection.'); }
     b1.disabled = b2.disabled = false;
+  }
+  /* ---------- send money (docs/ADMIN_SEND_MONEY.md). The server (admin_send_money / admin_send_money_all) checks the password again and decides everything: nothing here is trusted. ---------- */
+  var MN = { init: false, mode: 'one', players: null, pending: null, demoRows: [] };
+  var full = function (x) { return '₦' + NF.format(Number(x) || 0); };
+  var MERR = { bad_password: 'Wrong password.', locked: 'Too many wrong tries. Try again in 15 minutes.', auth_required: 'Sign in to the game first.', bad_amount: 'Type a whole amount of 1 naira or more.', too_much: 'That is above the safety limit for one send.',
+    too_long: 'The note is too long (80 characters at most).', player_not_found: 'No finished player has that username.', slow_down: 'An “all players” send just went out. Wait a minute before sending again.', no_players: 'There are no players to pay yet.' };
+  function mnNote(txt, ok) { var n = $('mnNote2'); n.className = ok ? 'msg ok' : 'msg'; n.textContent = txt || ''; }
+  function mnAmount() { var t = String($('mnAmt').value).replace(/[,\s]/g, ''); return /^[0-9]{1,10}$/.test(t) && Number(t) >= 1 ? Number(t) : 0; }
+  async function mnRpc(name, args) {
+    var r = await window.FutaApi.sb().rpc(name, args);
+    if (r.error) { var m = r.error.message || ''; throw new Error(m.indexOf(name) >= 0 && m.indexOf('function') >= 0 ? 'not_installed' : m.indexOf('auth_required') >= 0 ? 'auth_required' : 'failed'); }
+    return r.data || {};
+  }
+  function mnFail(e) {   // a refused request: show why; a wrong password sends you back to the lock screen
+    var c = e && e.message ? e.message : e;
+    if (c === 'bad_password' || c === 'locked' || c === 'auth_required') { pw = ''; showGate(c === 'auth_required' ? 'Sign in to the game first, then come back here.' : 'Enter the admin password.', MERR[c]); return; }
+    mnNote(MERR[c] || (c === 'not_installed' ? 'Run supabase/26_admin_send_money.sql in Supabase first.' : 'Could not send. Check your connection.'));
+  }
+  function mnReset() { MN.pending = null; $('mnConf').hidden = true; $('mnGo').hidden = false; mnNote(''); }
+  function mnMode(m) {
+    MN.mode = m; Array.prototype.forEach.call($('mnMode').children, function (b) { b.setAttribute('aria-checked', b.dataset.m === m ? 'true' : 'false'); });
+    $('mnUserW').hidden = m !== 'one'; mnReset(); $('mnInfo').textContent = '';
+    if (m === 'all') mnPlayers().then(function (c) { if (c != null && MN.mode === 'all') $('mnInfo').textContent = 'Everyone who finished sign-up gets it: ' + NF.format(c) + ' players right now.'; });
+  }
+  async function mnPlayers() {
+    try {
+      if (demo) { MN.players = 120; return 120; }
+      var r = await mnRpc('admin_money_preview', { p_password: pw }); if (!r.ok) { mnFail(r.error); return null; } MN.players = r.players | 0; return MN.players;
+    } catch (e) { mnFail(e); return null; }
+  }
+  async function mnReview() {
+    mnNote(''); var amt = mnAmount(), note = $('mnNote').value.trim(), user = $('mnUser').value.trim().replace(/^@/, '').toLowerCase();
+    if (MN.mode === 'one' && !/^[a-z0-9_]{3,20}$/.test(user)) { mnNote('Type the player’s username (3–20 letters, numbers or _).'); return; }
+    if (!amt) { mnNote(MERR.bad_amount); return; }
+    var players = 1; if (MN.mode === 'all') { players = await mnPlayers(); if (players == null) return; if (!players) { mnNote(MERR.no_players); return; } $('mnInfo').textContent = 'Everyone who finished sign-up gets it: ' + NF.format(players) + ' players right now.'; }
+    MN.pending = { mode: MN.mode, user: user, amt: amt, note: note, players: players };
+    $('mnConfTxt').textContent = MN.mode === 'one' ? 'Send ' + full(amt) + ' to @' + user + (note ? ' with the note “' + note + '”' : '') + '? It goes into their bank right away and cannot be undone.'
+      : 'Send ' + full(amt) + ' to EACH of ' + NF.format(players) + ' players (' + full(amt * players) + ' in total)' + (note ? ' with the note “' + note + '”' : '') + '? It goes into their banks right away and cannot be undone.';
+    $('mnConf').hidden = false; $('mnGo').hidden = true;
+  }
+  async function mnSend() {
+    var p = MN.pending; if (!p) return; var b1 = $('mnSend'), b2 = $('mnCancel'); b1.disabled = b2.disabled = true; mnNote('');
+    try {
+      var r;
+      if (demo) { if (!pw) throw new Error('bad_password'); r = { ok: true, players: p.mode === 'all' ? p.players : 1, total: p.amt * (p.mode === 'all' ? p.players : 1), to: p.user }; MN.demoRows.unshift({ scope: p.mode === 'all' ? 'all' : 'player', to: p.user, amount: p.amt, recipients: r.players, total: r.total, note: p.note, at: new Date().toISOString() }); }
+      else r = p.mode === 'one' ? await mnRpc('admin_send_money', { p_password: pw, p_username: p.user, p_amount: p.amt, p_note: p.note || null })
+        : await mnRpc('admin_send_money_all', { p_password: pw, p_amount: p.amt, p_expected: p.players, p_note: p.note || null });
+      if (!r.ok) {
+        if (r.error === 'count_changed') { MN.players = r.players | 0; mnReset(); mnNote('The number of players changed to ' + NF.format(r.players) + '. Nothing was sent. Press Review and check again.'); $('mnInfo').textContent = 'Everyone who finished sign-up gets it: ' + NF.format(r.players) + ' players right now.'; }
+        else { mnReset(); mnFail(r.error); } return;
+      }
+      mnReset(); $('mnAmt').value = ''; $('mnNote').value = ''; $('mnUser').value = '';
+      mnNote(p.mode === 'one' ? 'Sent ' + full(p.amt) + ' to @' + r.to + '. They have been alerted.' : 'Sent ' + full(p.amt) + ' to ' + NF.format(r.players) + ' players (' + full(r.total) + ' in total).', true); mnHistory();
+    } catch (e) { mnReset(); mnFail(e); }
+    finally { b1.disabled = b2.disabled = false; }
+  }
+  async function mnHistory() {
+    var host = $('mnHist'), rows = [];
+    try { if (demo) rows = MN.demoRows; else { var r = await mnRpc('admin_money_history', { p_password: pw }); if (!r.ok) return; rows = r.rows || []; } } catch (e) { return; }
+    var f = function (iso) { try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+    table(host, ['When', 'To', 'Each', 'Total'], rows.map(function (x) { return [f(x.at), x.scope === 'all' ? 'All ' + NF.format(x.recipients) + ' players' : '@' + x.to, full(x.amount), full(x.total)]; }), 'Nothing sent yet.');
+  }
+  function moneyInit() {
+    if (MN.init) { mnHistory(); return; } MN.init = true;
+    Array.prototype.forEach.call($('mnMode').children, function (b) { b.onclick = function () { mnMode(b.dataset.m); }; });
+    Array.prototype.forEach.call($('mnQuick').children, function (b) { b.onclick = function () { $('mnAmt').value = b.dataset.v; mnReset(); }; });
+    ['mnUser', 'mnAmt', 'mnNote'].forEach(function (id) { $(id).addEventListener('input', mnReset); });
+    $('mnReview').onclick = mnReview; $('mnCancel').onclick = mnReset; $('mnSend').onclick = mnSend; mnMode('one'); mnHistory();
   }
   $('gateForm').onsubmit = function (ev) { ev.preventDefault(); var v = $('pw').value; if (!v) return; pw = v; $('pw').value = ''; $('go').disabled = true; load(true).then(function () { $('go').disabled = false; }); };
   $('refresh').onclick = function () { load(false); };

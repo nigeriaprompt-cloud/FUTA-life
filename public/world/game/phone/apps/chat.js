@@ -169,7 +169,7 @@
       function row(name, sub, acts, onTap, cnt) {
         const d = document.createElement(onTap ? 'button' : 'div'); if (onTap) { d.type = 'button'; d.onclick = onTap; } d.className = 'ph-row';
         d.innerHTML = '<span class="ph-av" style="width:2.2em;height:2.2em;font-size:.9em"></span><span class="t"><b></b><small></small></span>';
-        d.querySelector('.ph-av').textContent = (name || '?').charAt(0).toUpperCase(); d.querySelector('b').textContent = name || 'Player'; d.querySelector('small').textContent = sub || ''; if (cnt) { d.dataset.u = cnt.k + ':' + cnt.id; const pl = document.createElement('span'); pl.className = 'ph-un'; const n0 = ((cnt.k === 'dm' ? U.dms : U.groups)[cnt.id]) | 0; pl.hidden = !n0; pl.textContent = capN(n0); d.querySelector('.t').after(pl); d.classList.toggle('has-un', !!n0); } (acts || []).forEach(a => d.appendChild(a)); return d;
+        d.querySelector('.ph-av').textContent = (name || '?').charAt(0).toUpperCase(); d.querySelector('b').textContent = name || 'Player'; { const bm = (Ph.botMark ? Ph.botMark(name) : null); if (bm) d.querySelector('b').appendChild(bm); } d.querySelector('small').textContent = sub || ''; if (cnt) { d.dataset.u = cnt.k + ':' + cnt.id; const pl = document.createElement('span'); pl.className = 'ph-un'; const n0 = ((cnt.k === 'dm' ? U.dms : U.groups)[cnt.id]) | 0; pl.hidden = !n0; pl.textContent = capN(n0); d.querySelector('.t').after(pl); d.classList.toggle('has-un', !!n0); } (acts || []).forEach(a => d.appendChild(a)); return d;
       }
       /* ---- replies (groups + neighbours) ---- */
       const quoteEl = (r) => { const q = document.createElement('div'), b = document.createElement('b'), t = document.createElement('span'); q.className = 'ph-quote'; b.textContent = r.username || 'Message'; t.textContent = String(r.body || '').slice(0, 80); q.append(b, t); return q; };
@@ -401,8 +401,8 @@
         bigBtn('👋 Wave at ' + (p.username || 'them'), (b) => rpc('send_wave', { p_to: p.id }).then(x => { if (x && x.status === 'accepted') openDm(p); else { lock(b, 'Wave sent ✓'); } }).catch(e => Ph.toast(nice(e))), 'gold');
       }
       async function openDm(f) {
-        reset(true, 'Message ' + (f.username || 'friend') + '…'); peer = f; ctx.setTitle(f.username || 'Chat');
-        { const pb = document.createElement('div'); pb.style.cssText = 'align-self:stretch;display:flex;justify-content:flex-end'; pb.style.gap = '.4em'; pb.appendChild(mini('₦ Send money', () => moneySheet(f), 'gold')); pb.appendChild(mini('👤 Profile', () => showProfile(f))); log.appendChild(pb); }
+        reset(true, 'Message ' + (f.username || 'friend') + '…'); peer = f; ctx.setTitle(f.username || 'Chat', f.username);
+        { const isB = !!(Ph.isBot && Ph.isBot(f.username)); const pb = document.createElement('div'); pb.style.cssText = 'align-self:stretch;display:flex;justify-content:flex-end'; pb.style.gap = '.4em'; if (!isB) pb.appendChild(mini('₦ Send money', () => moneySheet(f), 'gold')); pb.appendChild(mini('👤 Profile', () => showProfile(f))); log.appendChild(pb); if (isB) { const bn = document.createElement('div'); bn.className = 'ph-botnote'; bn.textContent = '🤖 Campus bot: replies are automated. Never share your password or bank details with anyone.'; log.appendChild(bn); } }
         dmHandler = (d) => { if (peer && d.sender === peer.id) { line({ id: d.id, body: d.body, kind: d.kind, amount: d.amount }, false, 'd'); if (canSee()) markRead(peer.id); else if (d.kind !== 'money') addDm(d.sender); return true; } return false; };
         if (demo) { clearDm(f.id); line({ body: 'Hey! 👋', username: f.username }); send = () => ({ demo: (t) => demoOut(t, 'd') }); suggest(); return; }
         send = (t) => ({ k: 'd', n: 'send_dm', a: { p_to: f.id, p_body: t }, scope: 'd:' + f.id });

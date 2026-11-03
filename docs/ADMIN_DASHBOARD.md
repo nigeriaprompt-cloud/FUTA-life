@@ -20,5 +20,8 @@ Tiles and cards use CSS grid auto-fit (1 column on phones, up to 7 tiles on desk
 ## Celebrations
 The same page has a Celebrations card (switch convocation, matriculation and other festive decorations on or off). See `docs/CELEBRATIONS.md`; needs `18_celebrations.sql`.
 
+## Send money
+The same page has a Send money card: pay one player (by username) or every player, with a review step and a history list. See `docs/ADMIN_SEND_MONEY.md`; needs `26_admin_send_money.sql`.
+
 ## Setup
 Run `17_admin_metrics.sql` (and `18_celebrations.sql`) after 01–16 (or paste `ALL_IN_ONE.sql`), sign in to the game, open `/admin`.

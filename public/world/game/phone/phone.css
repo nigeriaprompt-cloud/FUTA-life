@@ -200,3 +200,8 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ph-hf button:disabled,.ph-hf input:disabled{opacity:.6}
 .ph-hs{min-height:0;font-size:.78em;margin-top:.3em;opacity:.85}.ph-hs:empty{display:none}.ph-hs.ok{color:#9be3b0}.ph-hs.bad{color:#ffb4a8}
 
+
+/* Campus bot badge: a violet dot + "BOT". Violet is used for nothing else in the game, so it cannot be mistaken for anyone else's name colour. */
+.ph-bot{display:inline-flex;align-items:center;gap:.32em;margin-left:.45em;padding:.08em .5em .08em .38em;border-radius:1em;background:#efe6ff;color:#4b21a8;font:800 .66rem/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.05em;vertical-align:middle;white-space:nowrap}
+.ph-bot[hidden]{display:none}.ph-bot i{width:.62em;height:.62em;border-radius:50%;background:#8b3dff;box-shadow:0 0 0 2px #d9c2ff;flex:none}
+.ph-botnote{align-self:stretch;margin:.2em 0 .5em;padding:.5em .7em;border-radius:.8em;background:#efe6ff;color:#4b21a8;font-size:.82em;text-align:center}

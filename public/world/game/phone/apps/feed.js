@@ -66,7 +66,7 @@
       /* ---------------- Feed: classic cards, newest first, infinite scroll (keyset paging by id) ---------------- */
       function card(p) {
         const wrap = h('article', 'fd-post'), bg = BG[p.bg] || BGS[0];
-        const head = h('div', 'fd-head'); const av = h('span', 'ph-av', (p.username || '?').charAt(0).toUpperCase()); head.append(av, h('b', '', p.username || 'Player'), h('small', '', left(p.expires_at)));
+        const head = h('div', 'fd-head'); const av = h('span', 'ph-av', (p.username || '?').charAt(0).toUpperCase()); const nb = h('b', '', p.username || 'Player'); { const bm = (Ph.botMark ? Ph.botMark(p.username) : null); if (bm) nb.appendChild(bm); } head.append(av, nb, h('small', '', left(p.expires_at)));
         const c = h('div', 'fd-card', p.body); c.style.background = bg[1]; c.style.color = bg[2]; const n = p.body.length; c.style.fontSize = n <= 60 ? '1.5em' : n <= 140 ? '1.2em' : '1em';
         const foot = h('div', 'fd-foot'); if (!u || p.user_id !== u.id) { const r = h('button', '', 'Report'); r.type = 'button'; r.onclick = () => askReport(foot, p); foot.appendChild(r); }
         wrap.append(head, c, foot); return wrap;

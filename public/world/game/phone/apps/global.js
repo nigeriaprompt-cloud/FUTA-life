@@ -79,7 +79,7 @@
         if (m.username) names.set(String(m.username).toLowerCase(), m.username);
         const d = document.createElement('div'), me = isMine || (u && m.user_id === u.id); d.className = 'ph-msg' + (me ? ' me' : ''); d.style.position = 'relative';
         if (!me && m.username) { const s = document.createElement('small'); s.textContent = m.username; s.className = 'ph-who'; s.title = 'Tag @' + m.username;
-          s.onclick = () => tag(m.username); d.appendChild(s); }
+          s.onclick = () => tag(m.username); { const bm = (Ph.botMark ? Ph.botMark(m.username) : null); if (bm) s.appendChild(bm); } d.appendChild(s); }
         if (m.reply_name) { const q = document.createElement('div'); q.style.cssText = 'font-size:.8em;opacity:.8;border-left:3px solid #3a7bd5;padding:.1em .5em;margin-bottom:.3em;background:#00000012;border-radius:.3em'; const b = document.createElement('b'); b.textContent = '↩ ' + m.reply_name; q.appendChild(b); q.appendChild(document.createElement('br')); q.appendChild(document.createTextNode(m.reply_body || '')); d.appendChild(q); }
         const t = document.createElement('span'); fill(t, String(m.body || '')); d.appendChild(t);
         if (m.id != null || demo) { const r = document.createElement('button'); r.type = 'button'; r.textContent = '↩'; r.title = r.ariaLabel = 'Reply'; r.setAttribute('aria-label', 'Reply to ' + (m.username || 'message'));

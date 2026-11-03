@@ -33,6 +33,7 @@
       const B = g.FutaBulletin;
       if (!B) { const p = document.createElement('p'); p.className = 'ph-note'; p.textContent = 'Could not load the shared helper (bulletin-core.js).'; body.appendChild(p); return { back() { return false; } }; }
       const { h, CATS, REASONS, say, ago } = B, store = B.store('tutorial'), COL = Object.fromEntries(CATS);
+      const byWho = (n) => { const e = h('span', '', 'by ' + n); const m = (Ph.botMark ? Ph.botMark(n) : null); if (m) e.appendChild(m); return e; };
       let u = Ph.getUser(), tab = 'learn', dead = false, pg = null, cat = '', sort = 'new', closeDoc = null, st = { daily_limit: 3, posts_left: 3 };
       const style = h('style'); style.textContent = CSS; body.appendChild(style);
       const root = h('div', 'tu'); body.appendChild(root);
@@ -63,14 +64,14 @@
         function card(p) {
           const c = COL[p.category] || '#4b3fe0', a = h('article', 'tu-card'); a.style.setProperty('--c', c); a.tabIndex = 0; a.setAttribute('role', 'button');
           const pill = h('span', 'tu-pill', p.category); pill.style.background = c + '1f'; p._cnt = h('b', '', '👍 ' + p.helpful);
-          const meta = h('div', 'tu-meta'); meta.append(p._cnt, h('span', '', 'by ' + p.username), h('span', '', ago(p.created_at)), h('span', '', readMin(p.body) + ' min read'));
+          const meta = h('div', 'tu-meta'); meta.append(p._cnt, byWho(p.username), h('span', '', ago(p.created_at)), h('span', '', readMin(p.body) + ' min read'));
           a.append(pill, h('h3', 'tu-title', p.title), h('p', 'tu-ex', p.body.replace(/\s+/g, ' ')), meta); a.onclick = () => open(p); a.onkeydown = (e) => { if (e.key === 'Enter') open(p); }; return a;
         }
         function open(p) {   // the list stays in the page (hidden), so closing the guide is instant and keeps your place
           const y = body.scrollTop, own = !!u && p.user_id === u.id, c = COL[p.category] || '#4b3fe0'; parts.forEach(e => { e.style.display = 'none'; }); body.scrollTop = 0;
           const doc = h('div'); doc.style.cssText = 'display:flex;flex-direction:column;gap:.8em'; const back = h('button', 'tu-back', '← All guides'); back.type = 'button';
           const card_ = h('article', 'tu-doc'), pill = h('span', 'tu-pill', p.category); pill.style.background = c + '1f'; pill.style.setProperty('--c', c);
-          card_.append(pill, h('h2', '', p.title), h('div', 'tu-meta', 'by ' + p.username + ' · ' + ago(p.created_at) + ' · ' + readMin(p.body) + ' min read'));
+          card_.append(pill, h('h2', '', p.title), (() => { const meta2 = h('div', 'tu-meta'); meta2.append(byWho(p.username), h('span', '', ' · ' + ago(p.created_at) + ' · ' + readMin(p.body) + ' min read')); return meta2; })());
           p.body.split('\n').filter(l => l.trim()).forEach(l => card_.appendChild(h('p', 'tu-p', l)));
           const acts = h('div', 'tu-acts'); card_.appendChild(acts); doc.append(back, card_); view.appendChild(doc);
           const close = () => { doc.remove(); parts.forEach(e => { e.style.display = ''; }); body.scrollTop = y; closeDoc = null; }; closeDoc = close; back.onclick = close; actions(acts, p, own, close);

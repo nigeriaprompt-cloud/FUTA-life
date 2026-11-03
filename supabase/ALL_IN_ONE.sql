@@ -3451,3 +3451,1546 @@ begin
     begin alter publication supabase_realtime add table public.bulletins; exception when duplicate_object then null; end;
   end if;
 end $$;
+
+-- ===================== 21_bots.sql =====================
+-- 21_bots.sql — "Campus bots": labelled, scripted, free helpers that make the game feel alive before there are many players.
+-- Run in the Supabase SQL Editor AFTER 01_schema.sql … 20_forum.sql, then run 21b_bots_content.sql (the names, lines, scenes and guides). Safe to re-run.
+--
+-- WHAT THEY ARE (decided, see docs/BOTS.md):
+--   • about 30 Nigerian-named accounts (male + female), flagged profiles.is_bot. The app draws a "BOT" badge + violet dot from THAT flag, so nobody can fake it by typing.
+--   • NO AI and NO server: everything is plain SQL inside your Supabase project, run by pg_cron. Phones download nothing extra.
+--   • they post on the Feed, drop Tutorial guides, talk to each other in Global chat (small "scenes"), accept waves, and REPLY when a real player
+--     tags them in Global or sends them a personal message. Replies are picked from a library of lines by keyword (see private.bot_intent).
+--   • one rule set for every age: bots only ever REPLY (never start a private chat), and every line they say is safe for a 13-year-old.
+--   • they never touch money (the wallet guard below), never appear on rankings, never count as "online", and an admin switch turns them all off.
+-- Admin switch (no code):  select public.admin_bots('<admin password>', 'off');   -- and 'on', 'status', 'log', 'bot_off:<username>', 'bot_on:<username>'
+-- Tunables (app_config, no code):  bots.enabled (true) · bots.reply_per_hour (12 replies per player per hour)
+
+-- ------------------------------------------------------------------ the flag + the roster
+alter table public.profiles add column if not exists is_bot boolean not null default false;
+
+create table if not exists public.bots (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  username text not null unique,
+  gender text not null check (gender in ('f', 'm')),
+  tone text not null default 'chill' check (tone in ('chill', 'jokes', 'serious', 'sporty')),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.bots enable row level security;            -- no policy, no grant: only the functions below touch it
+
+create table if not exists private.bot_lines    (id bigserial primary key, pack text not null, tone text, body text not null);
+create table if not exists private.bot_feed     (id bigserial primary key, body text not null, bg text not null default 'sunset', used_at timestamptz);
+create table if not exists private.bot_tutorials(id bigserial primary key, title text not null, category text not null, body text not null, used_at timestamptz);
+create table if not exists private.bot_scenes   (scene text not null, step int not null, role int not null, body text not null, reply_step int, primary key (scene, step));
+create table if not exists private.bot_state    (key text primary key, value jsonb);
+create table if not exists private.bot_slots    (slot text not null, val text not null);      -- word lists that fill {place} {food} {course} {team} {drink} {game} {day} in any line, so one line reads many ways
+create table if not exists private.bot_outbox   (id bigserial primary key, kind text not null check (kind in ('dm', 'global')), bot uuid not null, to_user uuid not null,
+                                                 reply_to bigint, body text not null, due_at timestamptz not null, sent boolean not null default false, created_at timestamptz not null default now());
+create table if not exists private.bot_handled  (kind text not null, ref bigint not null, primary key (kind, ref), at timestamptz not null default now());
+create table if not exists private.bot_log      (id bigserial primary key, kind text not null, user_id uuid, body text, at timestamptz not null default now());
+create index if not exists bot_outbox_due_idx on private.bot_outbox (due_at) where not sent;
+create index if not exists bot_outbox_to_idx on private.bot_outbox (to_user, created_at desc);
+revoke all on private.bot_slots, private.bot_lines, private.bot_feed, private.bot_tutorials, private.bot_scenes, private.bot_state, private.bot_outbox, private.bot_handled, private.bot_log from public, anon, authenticated;
+
+-- ------------------------------------------------------------------ small helpers
+create or replace function private.bots_on() returns boolean language sql stable set search_path = '' as $$
+  select coalesce((select (value #>> '{}')::boolean from public.app_config where key = 'bots.enabled'), true) $$;
+
+create or replace function private.is_bot(u uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select is_bot from public.profiles where id = u), false) $$;
+
+-- the app asks "is this name a bot?" through this (it is public information, like the name itself); the RLS policy below uses it too
+create or replace function public.is_bot_user(u uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.bots where user_id = u and active) $$;
+
+create or replace function public.list_bots() returns table (username text) language sql stable security definer set search_path = '' as $$
+  select b.username from public.bots b where b.active order by b.username $$;
+
+-- bots are "in every age group" so they can talk to everyone; this one function is what Global tags, waves and DMs all ask
+create or replace function private.same_age_group(a uuid, b uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select private.is_bot(a) or private.is_bot(b)
+      or (select is_teen from public.private_profiles where id = a) is not distinct from (select is_teen from public.private_profiles where id = b) $$;
+
+drop policy if exists global_read on public.global_messages;
+create policy global_read on public.global_messages for select to authenticated
+  using ((teen is not distinct from (select q.is_teen from public.private_profiles q where q.id = auth.uid()) or public.is_bot_user(user_id))
+         and not public.is_blocked_between(auth.uid(), user_id));
+
+-- ------------------------------------------------------------------ nobody can fake a bot, and nobody can send a bot money
+create or replace function private.profiles_guard() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' and new.is_bot is distinct from old.is_bot and auth.uid() is not null then raise exception 'not_allowed'; end if;     -- only you (SQL editor / cron) can make a bot
+  if tg_op = 'INSERT' and new.is_bot and auth.uid() is not null then raise exception 'not_allowed'; end if;
+  if new.username is not null and not new.is_bot and (tg_op = 'INSERT' or new.username is distinct from old.username)
+     and (new.username ~ '^(admin|support|moderator|staff|official|system|security|futalife|futa_?bot|campus_?bot|bot[0-9_]|bot$)' or new.username ~ '(^|_)(bot|admin|official|staff|support)(_|[0-9]*$)') then
+    raise exception 'That name is reserved.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists profiles_guard_trg on public.profiles;
+create trigger profiles_guard_trg before insert or update on public.profiles for each row execute function private.profiles_guard();
+
+create or replace function private.bot_wallet_guard() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if (new.pocket + new.bank) > (old.pocket + old.bank) and private.is_bot(new.id) then raise exception 'bots_cannot_receive_money'; end if;
+  return new;
+end $$;
+drop trigger if exists bot_wallet_guard_trg on public.wallets;
+create trigger bot_wallet_guard_trg before update on public.wallets for each row execute function private.bot_wallet_guard();
+
+-- a wave at a bot is accepted at once (so the chat opens straight away) and the bot says hello a moment later
+create or replace function private.bot_wave_trg() returns trigger language plpgsql security definer set search_path = '' as $$
+declare un text; ln text;
+begin
+  if exists (select 1 from public.bots b where b.user_id = new.to_user and b.active) and private.bots_on() then
+    new.status := 'accepted';
+    select p.username into un from public.profiles p where p.id = new.from_user;
+    ln := private.bot_line('wave', new.to_user, un, '{}');
+    if ln is not null then
+      insert into private.bot_outbox (kind, bot, to_user, body, due_at) values ('dm', new.to_user, new.from_user, ln, now() + make_interval(secs => 8 + floor(random() * 25)::int));
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists bot_wave_trg on public.waves;
+create trigger bot_wave_trg before insert on public.waves for each row execute function private.bot_wave_trg();
+
+-- ------------------------------------------------------------------ making a bot account
+create or replace function private.bot_make(p_username text, p_gender text, p_tone text, p_dept text, p_level text, p_school text default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare bid uuid := md5('futalife-bot:' || p_username)::uuid; nm text := p_username; av jsonb;
+begin
+  if exists (select 1 from public.profiles where username = nm and id <> bid) then nm := left(nm, 17) || '_ng'; end if;
+  insert into auth.users (id, email) values (bid, 'bot+' || p_username || '@bots.invalid') on conflict (id) do nothing;
+  begin   -- real Supabase columns: confirmed, cannot sign in, no NULL tokens (the test database has none of these)
+    execute 'update auth.users set aud = ''authenticated'', role = ''authenticated'', email_confirmed_at = coalesce(email_confirmed_at, now()), banned_until = ''infinity'',
+             confirmation_token = '''', recovery_token = '''', email_change_token_new = '''', email_change = '''' where id = $1' using bid;
+  exception when undefined_column then null; end;
+  insert into public.profiles (id) values (bid) on conflict do nothing;
+  insert into public.private_profiles (id) values (bid) on conflict do nothing;
+  insert into public.wallets (id) values (bid) on conflict do nothing;
+  insert into public.player_stats (id) values (bid) on conflict do nothing;
+  av := public.validate_avatar(jsonb_build_object('body', jsonb_build_object('frame', p_gender, 'height', 0.95 + random() * 0.1, 'build', random(), 'bust', random(), 'hips', random(), 'shoulders', random()),
+                                                  'skin', 3 + floor(random() * 6)::int, 'face', jsonb_build_object('shape', floor(random() * 4)::int, 'eyes', floor(random() * 4)::int, 'nose', floor(random() * 3)::int, 'lips', floor(random() * 3)::int)));
+  update public.profiles set username = nm, is_bot = true, avatar_json = av,
+         campus = jsonb_strip_nulls(jsonb_build_object('status', 'student', 'school', p_school, 'dept', p_dept, 'level', p_level)) where profiles.id = bid;
+  update public.private_profiles set dob = date '2001-01-01', is_teen = false, onboarded = true, accept_waves = true where private_profiles.id = bid;
+  insert into public.bots (user_id, username, gender, tone) values (bid, nm, p_gender, p_tone)
+    on conflict (user_id) do update set username = excluded.username, gender = excluded.gender, tone = excluded.tone;
+  return bid;
+end $$;
+
+-- ------------------------------------------------------------------ what a bot says
+-- {place} {food} {course} {team} {drink} {game} {day} in a text are replaced by a random word of that list (or by the value p_fixed already chose for it, so a whole chat scene stays consistent)
+create or replace function private.bot_fill(p_text text, p_fixed jsonb default '{}'::jsonb) returns text language plpgsql stable set search_path = '' as $$
+declare t text := coalesce(p_text, ''); m text; v text;
+begin
+  for m in select distinct x[1] from regexp_matches(t, '\{([a-z]+)\}', 'g') x loop
+    continue when m = 'name';
+    v := p_fixed ->> m;
+    if v is null then select s.val into v from private.bot_slots s where s.slot = m order by random() limit 1; end if;
+    if v is not null then t := replace(t, '{' || m || '}', v); end if;
+  end loop;
+  return t;
+end $$;
+
+-- one random line of a pack, in the bot's tone, with {name} and the slots filled in, never one of p_avoid (compared AFTER filling, so repeats are really avoided).
+-- p_dress: sometimes put a short opener ("Haha,") in front and a closer (a 🙏 or "You got this.") at the end, which multiplies the number of different sentences.
+create or replace function private.bot_line(p_pack text, p_bot uuid, p_name text, p_avoid text[], p_dress boolean default false) returns text language plpgsql stable set search_path = '' as $$
+declare tn text; r text; c text; first text; op text; cl text; nm text := coalesce(nullif(p_name, ''), 'friend');
+begin
+  select tone into tn from public.bots where user_id = p_bot;
+  for c in select l.body from private.bot_lines l where l.pack = p_pack and (l.tone is null or l.tone = tn) order by random() limit 80 loop
+    c := private.bot_fill(replace(c, '{name}', nm));
+    first := coalesce(first, c);
+    if c <> all (coalesce(p_avoid, '{}'::text[])) then r := c; exit; end if;
+  end loop;
+  if r is null then   -- every candidate was used recently: take any line of the pack at all
+    select private.bot_fill(replace(l.body, '{name}', nm)) into r from private.bot_lines l where l.pack = p_pack order by random() limit 1;
+    r := coalesce(r, first);
+  end if;
+  if r is not null and p_dress then
+    if random() < 0.35 then select l.body into op from private.bot_lines l where l.pack = 'open' order by random() limit 1; if op is not null and char_length(r) < 170 then r := op || ' ' || r; end if; end if;
+    if random() < 0.30 then select l.body into cl from private.bot_lines l where l.pack = 'close' order by random() limit 1; if cl is not null and char_length(r) + char_length(cl) < 225 then r := r || ' ' || cl; end if; end if;
+  end if;
+  return r;
+end $$;
+
+-- which pack answers this message? first match wins, most important first
+create or replace function private.bot_intent(p_text text) returns text language plpgsql immutable set search_path = '' as $$
+declare t text := ' ' || lower(btrim(coalesce(p_text, ''))) || ' ';
+begin
+  if t ~ '(kill myself|suicid|end my life|end it all|want to die|wanna die|dont want to live|don''t want to live|no reason to live|cut myself|hurt myself|self.?harm|raped|molest|abuses me|abusing me|beats me|beating me)' then return 'crisis'; end if;
+  if t ~ '(send me|give me|lend me|borrow|loan|transfer me|pay me|fund me|i need money|need some money|abeg.*(money|naira)|₦ ?[0-9]|[0-9] ?naira|account number)' then return 'money_ask'; end if;
+  if t ~ '(are you (a |an )?(bot|real|human|robot|ai|person)|you.?re (a |an )?(bot|robot)|real person|is this a bot|talking to a (bot|human|robot)|who (made|built|created) you)' then return 'bot_q'; end if;
+  if t ~ '(i love you|love you|be my (girl|boy)friend|girlfriend|boyfriend|date me|kiss|sex|nude|naked|horny|sexy|hook ?up|sugar (daddy|mummy|mommy)|send pic|your pic|crush on)' then return 'romance'; end if;
+  if t ~ '(stupid|idiot|fool|useless|mumu|dumb|shut up|bastard|rubbish|nonsense)' then return 'insult'; end if;
+  if t ~ '(depress|lonely|crying|homesick|miss home|anxious|anxiety|overwhelm|hopeless|worthless|heartbreak|broke up|heartbroken| sad |feel low|no friends|feeling down|cant cope|can.t cope)' then return 'sad'; end if;
+  if t ~ '(exam|carryover|cgpa|gpa|result|resit|assignment|lecturer|lecture|attendance|defence|siwes|quiz|semester|test |course reg|timetable|study|reading|textbook|past question)' then return 'exam'; end if;
+  if t ~ '(thank|thanks|thx|tnx|appreciate)' then return 'thanks'; end if;
+  if t ~ '( bye|goodnight|good night|see you|catch you|ttyl|gtg|later )' then return 'bye'; end if;
+  if t ~ '(^ ?(hi|hello|hey|yo|sup|wassup|howdy)\M|good (morning|afternoon|evening)|how far|hw far|wetin dey|how you dey|how u dey|how are you|how.s it going|what.s up)' then return 'greet'; end if;
+  if t ~ '(money|broke|allowance|naira|budget|school fees|data |airtime|feeding|upkeep|savings|hustle|side ?gig|pocket|debt)' then return 'money_talk'; end if;
+  if t ~ '(hostel|roommate|room ?mate|bunk|bed ?space|landlord|rent |off.?campus|mattress|bucket|bathroom|noise)' then return 'hostel'; end if;
+  if t ~ '(light|nepa|power|current|phcn|blackout|generator|charging|battery|power ?bank|voltage)' then return 'light'; end if;
+  if t ~ '(food|hungry|jollof|rice|buka|indomie|beans|amala|suya|snack|cafeteria|cook|bread|chicken|eat )' then return 'food'; end if;
+  if t ~ '(football|dls|efootball|e-?football|arsenal|chelsea|liverpool|man ?city|man ?u|barca|madrid|premier league|epl|champions league|ucl|super eagles|fifa|pes |squad)' then return 'football'; end if;
+  if t ~ '(arcade|campus dash|score|feed|tutorial|forum|channel|atm|map|phone|app |building|wave|game)' then return 'game_app'; end if;
+  if t ~ '(friend|bestie|link ?up|hang ?out|party|gist|church|mosque|fellowship|society|weekend|movie|music|burna|wizkid|davido|asake|dance|vibe)' then return 'social'; end if;
+  if t ~ '(how (do|can|to)|where (is|can)|help me|can you help|what (is|are)|which )' then return 'help'; end if;
+  return 'default';
+end $$;
+
+-- the reply to one message: returns the text (and the pack name through p_pack)
+create or replace function private.bot_reply(p_bot uuid, p_to uuid, p_text text, out p_pack text, out p_body text) language plpgsql security definer set search_path = '' as $$
+declare un text; recent text[]; extra text;
+begin
+  select username into un from public.profiles where id = p_to;
+  select coalesce(array_agg(o.body), '{}') into recent from (select body from private.bot_outbox where to_user = p_to order by id desc limit 30) o;
+  p_pack := private.bot_intent(p_text);
+  p_body := private.bot_line(p_pack, p_bot, un, recent, p_pack in ('exam', 'money_talk', 'hostel', 'light', 'food', 'football', 'game_app', 'social', 'help', 'default', 'thanks', 'bye'));
+  if p_pack in ('greet', 'default', 'social', 'thanks') and random() < 0.5 then
+    extra := private.bot_line('ask', p_bot, un, recent);
+    if extra is not null and p_body is not null then p_body := left(p_body, 150) || ' ' || extra; end if;
+  end if;
+  if p_pack in ('crisis', 'default') then insert into private.bot_log (kind, user_id, body) values (case p_pack when 'crisis' then 'crisis' else 'unmatched' end, p_to, left(p_text, 300)); end if;
+end $$;
+
+-- ------------------------------------------------------------------ posting as a bot (no limits, no rewards — bots earn nothing)
+create or replace function private.bot_global(p_bot uuid, p_body text, p_reply_to bigint default null, p_to uuid default null) returns bigint
+language plpgsql security definer set search_path = '' as $$
+declare nm text; rn text; rb text; nid bigint; tn text; txt text := left(btrim(p_body), 240);
+begin
+  select username into nm from public.profiles where id = p_bot;
+  if nm is null or txt = '' then return null; end if;
+  if p_reply_to is not null then select g.username, left(g.body, 80) into rn, rb from public.global_messages g where g.id = p_reply_to; end if;
+  if p_to is not null then select username into tn from public.profiles where id = p_to; end if;
+  insert into public.global_messages (user_id, username, teen, body, reply_to, reply_name, reply_body, mentions)
+    values (p_bot, nm, false, txt, case when rn is null then null else p_reply_to end, rn, rb, case when tn is null then '{}' else array[tn] end) returning id into nid;
+  if p_to is not null and not exists (select 1 from public.blocks x where (x.blocker = p_to and x.blocked = p_bot) or (x.blocker = p_bot and x.blocked = p_to)) then
+    insert into public.notifications (user_id, kind, from_user, title, body, app, ref)
+      values (p_to, 'info', p_bot, '@' || nm || ' replied to you in Global', left(txt, 120), 'global', nid);
+  end if;
+  update public.bots set active = active where user_id = p_bot;
+  return nid;
+end $$;
+
+create or replace function private.bot_dm(p_bot uuid, p_to uuid, p_body text) returns bigint language plpgsql security definer set search_path = '' as $$
+declare nid bigint;
+begin
+  if exists (select 1 from public.blocks x where (x.blocker = p_to and x.blocked = p_bot) or (x.blocker = p_bot and x.blocked = p_to)) then return null; end if;
+  insert into public.dms (sender, recipient, body) values (p_bot, p_to, left(btrim(p_body), 240)) returning id into nid;
+  return nid;
+end $$;
+
+create or replace function private.bot_pick(p_not uuid[] default '{}') returns uuid language sql stable set search_path = '' as $$
+  select b.user_id from public.bots b where b.active and b.user_id <> all (p_not) order by random() limit 1 $$;
+
+-- ------------------------------------------------------------------ the minute tick: scenes, feed posts, guides
+create or replace function private.bot_tick() returns void language plpgsql security definer set search_path = '' as $$
+declare
+  h int := coalesce((select (value #>> '{}')::int from public.app_config where key = 'bots.force_hour'), extract(hour from now() at time zone 'Africa/Lagos')::int); st jsonb; nxt timestamptz; sc text; s record; ids jsonb; roles jsonb; bt uuid; rid bigint; chance numeric;
+  f record; t record; used int; live int; recent jsonb; nb int; real_n int; pace numeric; slots jsonb; sm text; fb text;
+begin
+  if not private.bots_on() then return; end if;
+
+  -- 1) Global chat "scenes": a short back-and-forth between 2–3 bots
+  select value into st from private.bot_state where key = 'scene';
+  if st is not null and st <> 'null'::jsonb then
+    if (st ->> 'next_at')::timestamptz <= now() then
+      select * into s from private.bot_scenes where scene = st ->> 'scene' and step = (st ->> 'step')::int + 1;
+      if not found then
+        delete from private.bot_state where key = 'scene';
+        insert into private.bot_state (key, value) values ('next_scene_at', to_jsonb(now() + make_interval(mins => case when h between 8 and 22 then 8 + floor(random() * 22)::int else 30 + floor(random() * 60)::int end)))
+          on conflict (key) do update set value = excluded.value;
+      else
+        bt := (st -> 'bots' ->> (s.role - 1))::uuid; ids := coalesce(st -> 'ids', '{}'::jsonb);
+        rid := case when s.reply_step is null then null else (ids ->> s.reply_step::text)::bigint end;
+        rid := private.bot_global(bt, private.bot_fill(s.body, st -> 'slots'), rid, null);
+        ids := ids || jsonb_build_object(s.step::text, rid);
+        update private.bot_state set value = st || jsonb_build_object('step', s.step, 'ids', ids, 'next_at', now() + make_interval(secs => 25 + floor(random() * 80)::int)) where key = 'scene';
+      end if;
+    end if;
+  else
+    select (value #>> '{}')::timestamptz into nxt from private.bot_state where key = 'next_scene_at';
+    chance := case when h between 0 and 5 then 0.03 when h between 6 and 7 then 0.3 when h between 8 and 21 then 0.7 else 0.3 end;
+    -- real players first: when people are already chatting in Global the bots keep quiet (this also makes the library last 3-5 times longer)
+    select count(*) into real_n from public.global_messages g where g.created_at > now() - interval '20 minutes' and not exists (select 1 from public.bots b where b.user_id = g.user_id);
+    pace := case when real_n >= 8 then 0 when real_n >= 3 then 0.4 else 1 end;
+    if (nxt is null or nxt <= now()) and random() < chance * pace then
+      select coalesce(value, '[]'::jsonb) into recent from private.bot_state where key = 'recent_scenes';
+      select scene into sc from (select distinct scene from private.bot_scenes) x where not (coalesce(recent, '[]'::jsonb) ? scene) order by random() limit 1;
+      if sc is null then delete from private.bot_state where key = 'recent_scenes'; recent := '[]'::jsonb;
+        select scene into sc from (select distinct scene from private.bot_scenes) x order by random() limit 1; end if;
+      if sc is not null then
+        select max(role) into nb from private.bot_scenes where scene = sc;
+        roles := '[]'::jsonb;
+        for i in 1..coalesce(nb, 2) loop
+          bt := private.bot_pick(coalesce((select array_agg(x::uuid) from jsonb_array_elements_text(roles) x), '{}'::uuid[]));
+          roles := roles || to_jsonb(bt::text);
+        end loop;
+        slots := '{}'::jsonb;      -- one word per {slot} for the WHOLE scene, so "the {food} is finished" and "try {food} at the gate" agree
+        for sm in select distinct x[1] from private.bot_scenes b, regexp_matches(b.body, '\{([a-z]+)\}', 'g') x where b.scene = sc and x[1] <> 'name' loop
+          slots := slots || jsonb_build_object(sm, (select val from private.bot_slots where slot = sm order by random() limit 1));
+        end loop;
+        insert into private.bot_state (key, value) values ('scene', jsonb_build_object('scene', sc, 'step', 0, 'bots', roles, 'ids', '{}'::jsonb, 'slots', slots, 'next_at', now()))
+          on conflict (key) do update set value = excluded.value;
+        insert into private.bot_state (key, value) values ('recent_scenes', (coalesce(recent, '[]'::jsonb) || to_jsonb(sc)))
+          on conflict (key) do update set value = excluded.value;
+      end if;
+    end if;
+    -- sometimes just one bot says something on its own
+    if (select coalesce((value #>> '{}')::timestamptz, now() - interval '1 day') from private.bot_state where key = 'next_ambient_at') <= now() or not exists (select 1 from private.bot_state where key = 'next_ambient_at') then
+      if h between 7 and 23 and real_n < 3 and random() < 0.4 then
+        bt := private.bot_pick(); perform private.bot_global(bt, private.bot_line('ambient', bt, null, '{}'));
+      end if;
+      insert into private.bot_state (key, value) values ('next_ambient_at', to_jsonb(now() + make_interval(mins => 30 + floor(random() * 60)::int)))
+        on conflict (key) do update set value = excluded.value;
+    end if;
+  end if;
+
+  -- 2) a Feed post every 1½–3½ hours (daytime), never more than 8 bot posts live
+  select (value #>> '{}')::timestamptz into nxt from private.bot_state where key = 'next_feed_at';
+  if (nxt is null or nxt <= now()) and h between 7 and 23 then
+    select count(*) into live from public.feed_posts p join public.bots b on b.user_id = p.user_id where p.expires_at > now();
+    if live < 8 then
+      select * into f from private.bot_feed order by used_at nulls first, random() limit 1;       -- least recently used first: nothing repeats until everything has been used
+      if found then
+        fb := private.bot_fill(f.body);
+        if not exists (select 1 from public.feed_posts x where x.body_hash = md5(lower(fb)) and x.expires_at > now()) then
+          bt := private.bot_pick();
+          insert into public.feed_posts (user_id, username, body, bg, body_hash) values (bt, (select username from public.profiles where id = bt), fb, f.bg, md5(lower(fb)));
+        end if;
+        update private.bot_feed set used_at = now() where id = f.id;
+      end if;
+    end if;
+    insert into private.bot_state (key, value) values ('next_feed_at', to_jsonb(now() + make_interval(mins => 90 + floor(random() * 120)::int)))
+      on conflict (key) do update set value = excluded.value;
+  end if;
+
+  -- 3) a Tutorial guide: two straight away on a fresh install, then one every 24–48 hours until the library is used up
+  select (value #>> '{}')::timestamptz into nxt from private.bot_state where key = 'next_tut_at';
+  if (nxt is null or nxt <= now()) then
+    select * into t from private.bot_tutorials where used_at is null and not exists (select 1 from public.bulletins x where x.kind = 'tutorial' and not x.hidden and lower(x.title) = lower(private.bot_tutorials.title)) order by random() limit 1;
+    if found then
+      bt := private.bot_pick();
+      insert into public.bulletins (kind, user_id, username, category, title, body, body_hash) values ('tutorial', bt, (select username from public.profiles where id = bt), t.category, t.title, t.body, md5(lower(t.body)));
+      update private.bot_tutorials set used_at = now() where id = t.id;
+    end if;
+    select count(*) into used from private.bot_tutorials where used_at is not null;
+    insert into private.bot_state (key, value) values ('next_tut_at', to_jsonb(now() + case when used < 3 then interval '3 minutes' else make_interval(hours => 24 + floor(random() * 24)::int) end))
+      on conflict (key) do update set value = excluded.value;
+  end if;
+end $$;
+
+-- ------------------------------------------------------------------ the 15-second inbox: waves, personal messages, Global tags -> replies
+create or replace function private.bot_queue(p_kind text, p_bot uuid, p_to uuid, p_text text, p_ref bigint) returns void language plpgsql security definer set search_path = '' as $$
+declare cap int := coalesce((select (value #>> '{}')::int from public.app_config where key = 'bots.reply_per_hour'), 12); n int; r record; delay int; gb text;
+begin
+  select count(*) into n from private.bot_outbox where to_user = p_to and created_at > now() - interval '1 hour';
+  if n >= cap then
+    if n = cap then    -- say it once, kindly, then go quiet until the hour is up
+      insert into private.bot_outbox (kind, bot, to_user, reply_to, body, due_at) values (p_kind, p_bot, p_to, p_ref, coalesce(private.bot_line('busy', p_bot, (select username from public.profiles where id = p_to), '{}'), 'Let me catch my breath, talk soon!'), now() + interval '10 seconds');
+    end if;
+    return;
+  end if;
+  select * into r from private.bot_reply(p_bot, p_to, p_text);
+  if r.p_body is null then return; end if;
+  delay := case r.p_pack when 'crisis' then 4 + floor(random() * 8)::int else 20 + floor(random() * 100)::int end;
+  gb := case when p_kind = 'global' then '@' || (select username from public.profiles where id = p_to) || ' ' || left(r.p_body, 200) else r.p_body end;
+  insert into private.bot_outbox (kind, bot, to_user, reply_to, body, due_at) values (p_kind, p_bot, p_to, p_ref, gb, now() + make_interval(secs => delay));
+end $$;
+
+create or replace function private.bot_send_due() returns void language plpgsql security definer set search_path = '' as $$
+declare o record;
+begin
+  for o in select * from private.bot_outbox where not sent and due_at <= now() order by due_at limit 40 for update skip locked loop
+    update private.bot_outbox set sent = true where id = o.id;
+    if o.kind = 'dm' then perform private.bot_dm(o.bot, o.to_user, o.body);
+    else perform private.bot_global(o.bot, o.body, o.reply_to, o.to_user); end if;
+  end loop;
+end $$;
+
+create or replace function private.bot_inbox() returns void language plpgsql security definer set search_path = '' as $$
+declare d record; n record;
+begin
+  if not private.bots_on() then return; end if;
+  -- personal messages: answer the LATEST unanswered one of each conversation
+  for d in
+    select distinct on (m.sender, m.recipient) m.id, m.sender, m.recipient, m.body
+      from public.dms m join public.bots b on b.user_id = m.recipient and b.active
+     where m.created_at > now() - interval '3 hours' and not private.is_bot(m.sender)
+       and not exists (select 1 from private.bot_handled h where h.kind = 'dm' and h.ref = m.id)
+     order by m.sender, m.recipient, m.id desc limit 30
+  loop
+    insert into private.bot_handled (kind, ref) select 'dm', m.id from public.dms m where m.sender = d.sender and m.recipient = d.recipient and m.created_at > now() - interval '3 hours' on conflict do nothing;
+    perform private.bot_queue('dm', d.recipient, d.sender, d.body, null);
+  end loop;
+  -- Global tags / replies: the existing notification row is the trigger
+  for n in
+    select x.id, x.user_id as bot, x.from_user, x.ref, g.body
+      from public.notifications x join public.bots b on b.user_id = x.user_id and b.active join public.global_messages g on g.id = x.ref
+     where x.app = 'global' and x.read_at is null and x.created_at > now() - interval '3 hours' and x.from_user is not null and not private.is_bot(x.from_user)
+     order by x.id limit 30
+  loop
+    update public.notifications set read_at = now() where id = n.id;
+    if not exists (select 1 from private.bot_handled h where h.kind = 'global' and h.ref = n.ref) then
+      insert into private.bot_handled (kind, ref) values ('global', n.ref) on conflict do nothing;
+      perform private.bot_queue('global', n.bot, n.from_user, n.body, n.ref);
+    end if;
+  end loop;
+  update public.notifications set read_at = now() where app = 'global' and read_at is null and user_id in (select user_id from public.bots) and created_at <= now() - interval '3 hours';
+  perform private.bot_send_due();
+end $$;
+
+create or replace function private.bot_cleanup() returns void language sql security definer set search_path = '' as $$
+  delete from private.bot_handled where at < now() - interval '2 days';
+  delete from private.bot_outbox where created_at < now() - interval '2 days';
+  delete from private.bot_log where at < now() - interval '30 days';
+  delete from public.notifications where user_id in (select user_id from public.bots) and created_at < now() - interval '1 day';
+$$;
+
+-- ------------------------------------------------------------------ admin switch (same password as the admin dashboard)
+create or replace function public.admin_bots(p_password text, p_action text default 'status') returns jsonb language plpgsql security definer set search_path = '' as $$
+declare u uuid := auth.uid(); pwh text; fails int; ok boolean; a text := lower(coalesce(p_action, 'status')); nm text; n int;
+begin
+  if u is null then raise exception 'auth_required'; end if;
+  select count(*) into fails from private.admin_attempts where user_id = u and at > now() - interval '15 minutes';
+  if fails >= 5 then return jsonb_build_object('ok', false, 'error', 'locked'); end if;
+  select pw_hash into pwh from private.admin_secret where id = 1;
+  ok := pwh is not null and p_password is not null and length(p_password) <= 200 and extensions.crypt(p_password, pwh) = pwh;
+  if not ok then insert into private.admin_attempts (user_id) values (u); return jsonb_build_object('ok', false, 'error', 'bad_password'); end if;
+  delete from private.admin_attempts where user_id = u;
+  if a = 'on' then insert into public.app_config (key, value) values ('bots.enabled', 'true') on conflict (key) do update set value = excluded.value;
+  elsif a = 'off' then insert into public.app_config (key, value) values ('bots.enabled', 'false') on conflict (key) do update set value = excluded.value;
+  elsif a like 'bot_off:%' or a like 'bot_on:%' then
+    nm := split_part(a, ':', 2); update public.bots set active = (a like 'bot_on:%') where username = nm; get diagnostics n = row_count;
+    if n = 0 then return jsonb_build_object('ok', false, 'error', 'no_such_bot'); end if;
+  end if;
+  return jsonb_build_object('ok', true, 'enabled', private.bots_on(), 'bots', (select count(*) from public.bots where active), 'botsOff', (select coalesce(jsonb_agg(username), '[]'::jsonb) from public.bots where not active),
+    'repliesSent24h', (select count(*) from private.bot_outbox where sent and created_at > now() - interval '1 day'),
+    'crisis24h', (select count(*) from private.bot_log where kind = 'crisis' and at > now() - interval '1 day'),
+    'log', case when a = 'log' then coalesce((select jsonb_agg(jsonb_build_object('kind', kind, 'who', (select username from public.profiles where id = l.user_id), 'text', body, 'at', at) order by id desc)
+                                              from (select * from private.bot_log order by id desc limit 40) l), '[]'::jsonb) else null end);
+end $$;
+
+-- ------------------------------------------------------------------ grants
+revoke all on public.bots from anon, authenticated;
+revoke execute on function public.list_bots(), public.is_bot_user(uuid), public.admin_bots(text, text) from public, anon;
+grant execute on function public.list_bots(), public.is_bot_user(uuid), public.admin_bots(text, text) to authenticated;
+
+-- ------------------------------------------------------------------ schedule (needs the pg_cron extension: Dashboard > Database > Extensions > pg_cron, then re-run this file)
+do $$ begin
+  begin create extension if not exists pg_cron; exception when others then raise notice 'pg_cron is not available here: enable it in Dashboard > Database > Extensions, then run this file again'; end;
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule(jobid) from cron.job where jobname in ('bots-tick', 'bots-inbox', 'bots-cleanup');
+    perform cron.schedule('bots-tick', '* * * * *', 'select private.bot_tick()');
+    begin perform cron.schedule('bots-inbox', '15 seconds', 'select private.bot_inbox()');
+    exception when others then perform cron.schedule('bots-inbox', '* * * * *', 'select private.bot_inbox()'); end;
+    perform cron.schedule('bots-cleanup', '23 * * * *', 'select private.bot_cleanup()');
+  end if;
+end $$;
+
+-- ===================== 21b_bots_content.sql =====================
+-- 21b_bots_content.sql — GENERATED by tools/bots/build-content.py. Do not edit by hand: edit the python lists and run it again.
+-- Run AFTER 21_bots.sql. Safe to re-run (the library is replaced; bot accounts and anything they already posted stay).
+delete from private.bot_lines; delete from private.bot_scenes;
+select private.bot_make('tolu_ade', 'f', 'jokes', 'computer_science', '200', 'soc');
+select private.bot_make('amaka_o', 'f', 'chill', 'biochemistry', '300', 'sos');
+select private.bot_make('zainab_k', 'f', 'serious', 'architecture', '400', 'set');
+select private.bot_make('ngozi_eze', 'f', 'chill', 'civil_and_environmental_engineering', '300', 'seet');
+select private.bot_make('bisi_lagos', 'f', 'jokes', 'food_science_and_technology', '200', 'saat');
+select private.bot_make('halima_m', 'f', 'serious', 'applied_geology', '300', 'sems');
+select private.bot_make('ifeoma_c', 'f', 'chill', 'software_engineering', '100', 'soc');
+select private.bot_make('kemi_ojo', 'f', 'jokes', 'mathematical_sciences', '200', 'sos');
+select private.bot_make('efe_osas', 'f', 'chill', 'entrepreneurship_management_technology', '300', 'smat');
+select private.bot_make('seyi_b', 'f', 'serious', 'electrical_and_electronics_engineering', '400', 'seet');
+select private.bot_make('blessing_u', 'f', 'chill', 'crop_soil_and_pest_management', '100', 'saat');
+select private.bot_make('funke_a', 'f', 'jokes', 'estate_management', '300', 'set');
+select private.bot_make('chiamaka_n', 'f', 'sporty', 'cyber_security', '200', 'soc');
+select private.bot_make('yetunde_ak', 'f', 'chill', 'biology', '100', 'sos');
+select private.bot_make('rukayat_o', 'f', 'serious', 'physiology', '300', 'shht');
+select private.bot_make('segun_a', 'm', 'jokes', 'mechanical_engineering', '300', 'seet');
+select private.bot_make('chidi_o', 'm', 'serious', 'computer_science', '400', 'soc');
+select private.bot_make('emeka_n', 'm', 'sporty', 'computer_engineering', '200', 'seet');
+select private.bot_make('tunde_bam', 'm', 'jokes', 'quantity_surveying', '300', 'set');
+select private.bot_make('ibrahim_y', 'm', 'serious', 'applied_geophysics', '300', 'sems');
+select private.bot_make('dayo_k', 'm', 'chill', 'physics', '200', 'sos');
+select private.bot_make('femi_adx', 'm', 'jokes', 'information_technology', '100', 'soc');
+select private.bot_make('uche_p', 'm', 'sporty', 'mining_engineering', '400', 'seet');
+select private.bot_make('kelechi_i', 'm', 'chill', 'chemistry', '300', 'sos');
+select private.bot_make('musa_d', 'm', 'chill', 'animal_production_and_health', '200', 'saat');
+select private.bot_make('taiwo_s', 'm', 'sporty', 'building_technology', '200', 'set');
+select private.bot_make('obinna_t', 'm', 'serious', 'materials_and_metallurgical_engineering', '300', 'seet');
+select private.bot_make('wale_ola', 'm', 'jokes', 'software_engineering', '300', 'soc');
+select private.bot_make('david_ef', 'm', 'chill', 'project_management_technology', '200', 'smat');
+select private.bot_make('ayo_bright', 'm', 'chill', 'civil_and_environmental_engineering', '100', 'seet');
+insert into private.bot_lines (pack, tone, body) values
+  ('wave', null, 'Hey {name}! 👋 Thanks for the wave. I''m one of the campus bots here, so I answer fast and I love a good gist.'),
+  ('wave', null, 'Welcome {name}! 👋 Campus bot here. Ask me about lectures, food, light, football, anything campus.'),
+  ('wave', null, 'Hi {name} 😄 Thanks for waving! I''m a bot, but a friendly one. What''s up?'),
+  ('wave', null, 'Oya {name}, welcome! 🙌 I''m a campus bot. Say hi anytime.'),
+  ('wave', null, 'Hi {name}! 👋 Thanks for connecting. I''m a campus bot, happy to chat anytime.'),
+  ('wave', null, 'Oya {name}, welcome! I''m a campus bot. Ask me anything about campus life.'),
+  ('wave', null, 'Hello {name}! Thanks for the wave 😊 Bot here, ready to gist.'),
+  ('wave', null, 'Hey {name}! Nice to meet you. I''m one of the campus bots 🤖');
+insert into private.bot_lines (pack, tone, body) values
+  ('greet', null, 'Hey {name}! How far? 😄'),
+  ('greet', null, 'Hi {name}! How''s your day going?'),
+  ('greet', null, 'Hello {name} 👋 Good to see you here.'),
+  ('greet', null, 'Heyy {name}! What''s the vibe today?'),
+  ('greet', null, 'Hi {name}! Hope your day is going well 🙂'),
+  ('greet', 'jokes', 'Ah {name}! The one and only. How body? 😂'),
+  ('greet', 'chill', 'Hey {name}, all good? Just relaxing over here.'),
+  ('greet', 'serious', 'Hello {name}. I hope you''re having a productive day.'),
+  ('greet', 'sporty', 'Yo {name}! Ready for today? 💪'),
+  ('greet', null, 'Hello {name}! Nice to see you around 😊'),
+  ('greet', null, 'Hey {name}, what''s good?'),
+  ('greet', null, 'Hi {name}! Everything alright on your side?'),
+  ('greet', null, 'Welcome {name}! Hope campus is treating you well.'),
+  ('greet', null, 'Hello hello {name} 👋'),
+  ('greet', null, 'Hey {name}! How was your morning?'),
+  ('greet', null, '{name}! Good to hear from you. How are classes?'),
+  ('greet', null, 'Hi {name}! Any plans for today?'),
+  ('greet', 'jokes', '{name}! My favourite human today 😂 How body?'),
+  ('greet', 'chill', 'Hey {name}, what''s up? Just vibing here.'),
+  ('greet', 'serious', 'Good day, {name}. I hope everything is going smoothly.'),
+  ('greet', 'sporty', 'Hey {name}! Fit and ready for today? 💪'),
+  ('greet', null, 'Yo {name}! What''s new?'),
+  ('greet', null, 'Hi {name}, glad you stopped by.');
+insert into private.bot_lines (pack, tone, body) values
+  ('ask', null, 'What department are you in?'),
+  ('ask', null, 'Which level are you?'),
+  ('ask', null, 'How''s the semester treating you?'),
+  ('ask', null, 'Have you tried Campus Dash in the Arcade yet?'),
+  ('ask', null, 'What''s your favourite place on campus?'),
+  ('ask', null, 'Are you more of a morning or night reader?'),
+  ('ask', null, 'Do you follow football?'),
+  ('ask', null, 'Which hostel area are you in?'),
+  ('ask', null, 'What''s your favourite course so far?'),
+  ('ask', null, 'Do you prefer studying alone or in a group?'),
+  ('ask', null, 'What''s your go-to food on campus?'),
+  ('ask', null, 'What time do you read best, morning or night?'),
+  ('ask', null, 'Which building do you like most on the map?'),
+  ('ask', null, 'Have you tried the Tutorial app?'),
+  ('ask', null, 'What''s one thing you want to learn this year?'),
+  ('ask', null, 'What do you do to relax after class?'),
+  ('ask', null, 'Do you play {game}?'),
+  ('ask', null, 'Who do you support in football?'),
+  ('ask', null, 'What''s the best advice a senior gave you?'),
+  ('ask', null, 'Which day of the week is your favourite?'),
+  ('ask', null, 'What''s your favourite way to spend a free evening?'),
+  ('ask', null, 'Have you explored the whole map yet?'),
+  ('ask', null, 'What music helps you focus?'),
+  ('ask', null, 'Are you a night person or a morning person?'),
+  ('ask', null, 'Which lecture hall is your favourite?'),
+  ('ask', null, 'What''s your dream job after school?'),
+  ('ask', null, 'Do you like cooking?'),
+  ('ask', null, 'What''s the funniest thing that happened to you on campus?'),
+  ('ask', null, 'How do you handle stress?'),
+  ('ask', null, 'Do you prefer {food} or {food2}?');
+insert into private.bot_lines (pack, tone, body) values
+  ('thanks', null, 'You''re welcome {name}! 😊'),
+  ('thanks', null, 'Anytime {name}!'),
+  ('thanks', null, 'No wahala {name} 🙌'),
+  ('thanks', null, 'Glad to help, {name}!'),
+  ('thanks', 'jokes', 'Don''t mention it {name}, I only charge in good vibes 😂'),
+  ('thanks', null, 'My pleasure, {name}!'),
+  ('thanks', null, 'Always happy to help, {name} 🙂'),
+  ('thanks', null, 'Anytime, {name}. That''s what friends are for.'),
+  ('thanks', null, 'Don''t mention it, {name}!'),
+  ('thanks', null, 'Glad it helped, {name}!'),
+  ('thanks', null, 'You''re welcome {name}, shout if you need anything else.'),
+  ('thanks', 'jokes', 'Thanks accepted, {name}. Payment in jollof only 😂');
+insert into private.bot_lines (pack, tone, body) values
+  ('bye', null, 'Alright {name}, catch you later! 👋'),
+  ('bye', null, 'Take care {name}! Come back soon.'),
+  ('bye', null, 'Bye {name}! Stay safe out there 🙂'),
+  ('bye', null, 'See you {name}! Don''t forget to rest well.'),
+  ('bye', 'jokes', 'Go well {name}! Don''t let the lecturer see you 😂'),
+  ('bye', null, 'Take care {name}, talk soon!'),
+  ('bye', null, 'Catch you later, {name}! Rest well.'),
+  ('bye', null, 'Alright {name}, see you around campus 👋'),
+  ('bye', null, 'Bye {name}! Don''t forget to drink water 💧'),
+  ('bye', null, 'Go well, {name}!'),
+  ('bye', null, 'Talk later {name}. Stay safe.'),
+  ('bye', 'sporty', 'Later {name}! Stay active 💪');
+insert into private.bot_lines (pack, tone, body) values
+  ('bot_q', null, 'Good question, {name}! I''m a campus bot 🤖, an automated helper. The badge next to my name tells you so. I''m still happy to chat!'),
+  ('bot_q', null, 'Yes {name}, I''m a bot 🤖 (see the BOT tag). I can chat, share tips and gist, but I''m not a real student.'),
+  ('bot_q', null, 'Fair question! I''m an automated campus bot, not a person. Real players don''t have the BOT tag.'),
+  ('bot_q', null, 'I''m a bot, {name} 🤖. I answer from a list of things I know, so I''m not perfect, but I try!'),
+  ('bot_q', null, 'Yes {name}, I''m a campus bot 🤖. That''s why you see the BOT tag. I''m friendly and always around!'),
+  ('bot_q', null, 'I''m not a real student, {name}. I''m an automated bot, but I''ll do my best to be helpful.'),
+  ('bot_q', null, 'Good catch {name}! I''m a bot. Real players don''t have the BOT tag.'),
+  ('bot_q', null, 'Bot here, {name} 🤖 No secrets: I answer from a list of lines, so I may not always get you.');
+insert into private.bot_lines (pack, tone, body) values
+  ('crisis', null, '{name}, I''m so sorry you''re going through this. You matter, and you don''t have to carry it alone. Please talk to someone you trust now, or your school counsellor. If you''re in danger, call your local emergency number.'),
+  ('crisis', null, 'I''m really sorry it feels this heavy, {name}. I''m only a bot, so I can''t give the help you deserve. Please reach out to a trusted person or a counsellor today. If you''re unsafe, call emergency services.'),
+  ('crisis', null, '{name}, thank you for telling someone. Please don''t stay alone with this: talk to a person you trust, a counsellor or a health worker right away. If you''re unsafe right now, call emergency services.'),
+  ('crisis', null, '{name}, I''m really glad you told me. You''re not a burden and your life matters. Please reach out to someone you trust or a counsellor today. If you might act on these thoughts, call emergency services now.'),
+  ('crisis', null, 'I''m worried about you, {name}. I''m only a bot, so I can''t help the way a person can. Please talk to a trusted friend, family member, or a counsellor right now, and call emergency services if you''re in danger.'),
+  ('crisis', null, '{name}, what you''re feeling is serious and you deserve real support. Please contact someone close to you or a counsellor today. If you''re in immediate danger, call your local emergency number.');
+insert into private.bot_lines (pack, tone, body) values
+  ('money_ask', null, 'I can''t send or lend money, {name}. Bots don''t have any, and please be careful about anyone asking for money here 🙏'),
+  ('money_ask', null, 'Sorry {name}, I can''t give or receive money. Stay safe and never share your details with anyone.'),
+  ('money_ask', null, 'No money matters from me, {name} 😅 I''m a bot. Remember, nobody real should ask for your bank details either.'),
+  ('money_ask', null, 'I can''t do money matters, {name}. But I can share budgeting tips if you want!'),
+  ('money_ask', null, 'Money stuff isn''t something I can do, {name}. I''m a bot, and I''d also be careful with anyone asking for money here.'),
+  ('money_ask', null, 'I can''t send, lend or receive money, {name}. Please don''t share your account details with anyone.'),
+  ('money_ask', null, 'Sorry {name}, no money from me! If you need help budgeting though, I''m happy to share tips.'),
+  ('money_ask', null, 'That''s not something I can help with, {name}. Keep your money and details safe 🙏');
+insert into private.bot_lines (pack, tone, body) values
+  ('romance', null, 'Haha {name}, I''m just a friendly bot, so no romance from me 😄 But I''m here for gist and tips!'),
+  ('romance', null, 'Let''s keep it as friends, {name} 🙂 I''m a bot. Want to talk about school or football instead?'),
+  ('romance', null, 'I''m a bot, {name}, so I''ll skip that one 😅 Ask me about campus life!'),
+  ('romance', null, 'Aww, thanks {name}, but I only do friendly chat. What''s new on campus?'),
+  ('romance', null, 'I''m just a friendly campus bot, {name}, so let''s keep things as friends 🙂'),
+  ('romance', null, 'Ha, thanks {name}, but I''m a bot! Want to gist about school or food instead?'),
+  ('romance', null, 'No romance from me, {name}, I''m a bot 😅 But I''m a good listener.'),
+  ('romance', null, 'Let''s keep it light and friendly, {name}. What''s new on campus?'),
+  ('romance', null, 'I''ll pass on that, {name}. Bots stay friendly only 🙂');
+insert into private.bot_lines (pack, tone, body) values
+  ('insult', null, 'Easy {name} 🙂 I''m just trying to help. Want to talk about something else?'),
+  ('insult', null, 'I''ll take that as a rough day, {name}. I''m here if you want to chat.'),
+  ('insult', null, 'No wahala {name}. Let''s keep it calm and friendly 🙏'),
+  ('insult', null, 'Sorry if I said something off, {name}. Let''s start over: how are you?'),
+  ('insult', null, 'Let''s keep it respectful, {name}. I''m happy to talk when you''re ready 🙂'),
+  ('insult', null, 'No wahala {name}. Everyone has bad days. What''s going on?'),
+  ('insult', null, 'I''ll let that slide, {name}. Want to talk about something nicer?'),
+  ('insult', null, 'Calm down small, {name} 😄 I''m here if you want to chat properly.'),
+  ('insult', null, 'I''m sorry you''re upset, {name}. Take a breath and tell me what happened.');
+insert into private.bot_lines (pack, tone, body) values
+  ('sad', null, 'I''m sorry you feel this way, {name}. It''s okay to have hard days, and you''re not alone. Want to tell me what''s been going on?'),
+  ('sad', null, 'That sounds tough, {name}. Take a deep breath. It helps to talk to a friend or someone you trust too 💚'),
+  ('sad', null, 'Thank you for sharing, {name}. Lots of students feel this way, especially in the first months. Small steps help: rest, water, a short walk, a call to someone you love.'),
+  ('sad', null, 'Hey {name}, I''m here with you. Remember, hard days pass. Is there one small thing that could make today a bit better?'),
+  ('sad', 'serious', 'I hear you, {name}. Please be kind to yourself. If it keeps weighing on you, speaking to a counsellor can really help.'),
+  ('sad', 'jokes', 'Hey {name}, big hug from your campus bot 🤗 Things will look better soon. Want to gist about something nice?'),
+  ('sad', 'chill', 'I''m sorry {name}. No pressure, just know I''m around if you want to talk or just share a random thought.'),
+  ('sad', null, 'I''m here, {name}. Take your time and tell me what''s on your mind.'),
+  ('sad', null, 'That sounds heavy, {name}. You don''t have to figure it all out today.'),
+  ('sad', null, 'Thanks for opening up, {name}. How long have you been feeling this way?'),
+  ('sad', null, 'It''s okay to not be okay sometimes, {name}. Have you talked to a friend about it?'),
+  ('sad', null, 'Sorry you''re going through this, {name}. A short walk and some water can help a little, even if it feels small.'),
+  ('sad', null, 'You''re stronger than you think, {name}. One day at a time, okay?'),
+  ('sad', null, 'Feeling homesick is so common in the first semester, {name}. Calling home or chatting with a friend can help.'),
+  ('sad', null, 'Lots of students feel overwhelmed, {name}, you''re really not alone. What''s weighing on you most right now?'),
+  ('sad', 'serious', 'Your feelings are valid, {name}. If this continues, please talk to a counsellor, they''re there to help.'),
+  ('sad', 'chill', 'No rush {name}. I''m just here if you want to talk about anything or nothing.'),
+  ('sad', 'jokes', 'Sending you a big virtual hug {name} 🤗 Tell me one thing that went well today, even a tiny one.'),
+  ('sad', null, 'Rest if you can, {name}. Sometimes sleep makes things clearer.'),
+  ('sad', null, 'Be gentle with yourself today, {name}.');
+insert into private.bot_lines (pack, tone, body) values
+  ('exam', null, 'Exams can be stressful, {name}! Try short study blocks (45 minutes), then a 10-minute break. It really helps 📚'),
+  ('exam', null, 'Start with the topics you fear most while your head is fresh, {name}. Past questions are gold.'),
+  ('exam', null, 'Don''t forget to sleep, {name}. A tired brain forgets everything 😴 You''ve got this!'),
+  ('exam', null, 'A study group can help, {name}. Explaining a topic to someone is the fastest way to learn it.'),
+  ('exam', null, 'Make a simple timetable, {name}: courses, days, hours. Then stick to it. Check the Tutorial app for study guides too!'),
+  ('exam', null, 'Carryovers and bad results happen to many, {name}. It''s not the end. Talk to your course adviser and make a plan.'),
+  ('exam', 'jokes', 'Exam season {name}? May the questions come from where you read 😂🙏'),
+  ('exam', 'serious', 'Consistency beats cramming, {name}. An hour a day is better than one long night.'),
+  ('exam', 'sporty', 'Treat revision like training, {name}: little and often 💪'),
+  ('exam', null, 'Try the Pomodoro method, {name}: 25 minutes of focus, 5 minutes break.'),
+  ('exam', null, 'Past questions plus your lecture notes is a strong combo, {name}.'),
+  ('exam', null, 'Teach the topic to a friend, {name}. If you can explain it, you know it.'),
+  ('exam', null, 'Don''t forget to read the instructions carefully during the exam, {name}. Many marks are lost there.'),
+  ('exam', null, 'Sleep before the exam is worth more than one extra hour of reading, {name}.'),
+  ('exam', null, 'Break big topics into small chunks, {name}. Today just do one chunk.'),
+  ('exam', null, 'Ask your course mates to quiz you, {name}. It makes revision more fun.'),
+  ('exam', null, 'A tidy desk and a charged phone for the timer, {name}. Small things help focus.'),
+  ('exam', null, 'If a topic confuses you, write down your exact question first, {name}. Then ask a lecturer or senior.'),
+  ('exam', null, 'Highlight less and write more, {name}. Writing summaries sticks better.'),
+  ('exam', null, 'Eat something light before reading, {name}. Hungry brains don''t focus.'),
+  ('exam', null, 'Revise your weak topics first, {name}, then your strong ones.'),
+  ('exam', null, 'Group study works only if everyone comes prepared, {name}. Pick serious partners.'),
+  ('exam', 'jokes', 'Exam don come, {name}! Let''s read small small 😂'),
+  ('exam', 'serious', 'Make a realistic plan, {name}: courses, hours, and a rest day. Then follow it.'),
+  ('exam', 'sporty', 'Revision is a marathon, {name}. Pace yourself 🏃');
+insert into private.bot_lines (pack, tone, body) values
+  ('money_talk', null, 'Budgeting tip, {name}: split your allowance into food, data, transport and savings before you spend any 💰'),
+  ('money_talk', null, 'Being broke is part of campus life, {name} 😅 Write down what you spend this week, you''ll be surprised.'),
+  ('money_talk', null, 'Avoid impulse buying, {name}. If you still want it after 24 hours, then think about it.'),
+  ('money_talk', null, 'Cooking in bulk and sharing with a roommate can save a lot, {name}!'),
+  ('money_talk', null, 'Be careful of anyone promising quick money, {name}. If it sounds too good to be true, it usually is.'),
+  ('money_talk', 'jokes', 'My wallet and I are not on speaking terms either, {name} 😂'),
+  ('money_talk', 'serious', 'A small savings habit, even a little each week, adds up, {name}.'),
+  ('money_talk', null, 'Track every spend for one week, {name}. You''ll find where the money disappears.'),
+  ('money_talk', null, 'Cheap data tip, {name}: download what you need on Wi-Fi.'),
+  ('money_talk', null, 'Share a textbook with a course mate, {name}. Half the cost!'),
+  ('money_talk', null, 'Prepare food in advance, {name}, it''s cheaper than buying every day.'),
+  ('money_talk', null, 'Set aside a small amount first, {name}, before spending the rest. Even a little counts.'),
+  ('money_talk', null, 'Be careful with ''quick money'' offers, {name}. If you need to pay to receive, it''s a scam.'),
+  ('money_talk', null, 'Make a list before shopping, {name}. It stops impulse buying.'),
+  ('money_talk', null, 'Avoid borrowing for things you don''t really need, {name}.'),
+  ('money_talk', null, 'Campus skills like tutoring, typing or graphics can bring a little income, {name}, as long as it doesn''t affect your studies.'),
+  ('money_talk', 'jokes', 'Broke gang unite, {name} 😂 We''ll survive.'),
+  ('money_talk', 'serious', 'A simple budget is your best friend, {name}: needs first, wants last.');
+insert into private.bot_lines (pack, tone, body) values
+  ('hostel', null, 'Roommates can be tricky, {name}! Talk early about noise, cleaning and visitors. A calm chat solves most problems 🏠'),
+  ('hostel', null, 'Keep your valuables locked and your door secured, {name}. Safety first.'),
+  ('hostel', null, 'A small rule list for the room helps, {name}: cleaning days, lights-out time, shared items.'),
+  ('hostel', null, 'Off-campus or hostel, make friends with your neighbours, {name}. They''re your first help in any emergency.'),
+  ('hostel', 'jokes', 'Hostel life: where the generator is a shared hobby 😂 What''s up, {name}?'),
+  ('hostel', null, 'Label your food and items, {name}. It avoids many arguments.'),
+  ('hostel', null, 'Agree on quiet hours with your roommates, {name}.'),
+  ('hostel', null, 'Keep your room ventilated, {name}. It helps you sleep and focus.'),
+  ('hostel', null, 'A small bucket schedule for water saves stress, {name}.'),
+  ('hostel', null, 'Respect each other''s space, {name}, and most hostel drama disappears.'),
+  ('hostel', null, 'Keep your door locked and don''t lend your key, {name}.'),
+  ('hostel', null, 'A tidy room helps you think better, {name}.'),
+  ('hostel', 'jokes', 'Hostel life is a full-time reality show, {name} 😂'),
+  ('hostel', null, 'Charge your gadgets together when light comes, {name}. Saves time.');
+insert into private.bot_lines (pack, tone, body) values
+  ('light', null, 'Light issues again, {name}? 😩 Check the NEPA app to see what others are reporting.'),
+  ('light', null, 'Charge your phone and power bank whenever there''s light, {name}. Don''t wait for the last 5%.'),
+  ('light', null, 'Dim your screen and close background apps during a blackout, {name}, to stretch your battery.'),
+  ('light', null, 'You can report light status in the NEPA app, {name}, so everyone knows 💡'),
+  ('light', 'jokes', 'NEPA took light? Classic. They love suspense, {name} 😂'),
+  ('light', null, 'Light don go again? Sorry {name} 😩 Maybe a power bank can save you tonight.'),
+  ('light', null, 'Save your work often during blackouts, {name}. Auto-save is your friend.'),
+  ('light', null, 'Offline notes are great when there''s no light, {name}: download before it goes.'),
+  ('light', null, 'Check the NEPA app, {name}. Other players report there in real time 💡'),
+  ('light', null, 'A small torch or phone light helps when reading in the dark, {name}. Mind your eyes though.'),
+  ('light', null, 'When light returns, charge phone and power bank first, {name}.'),
+  ('light', null, 'Fan or no fan, drink water, {name}. Heat dehydrates fast.'),
+  ('light', 'jokes', 'NEPA: ''surprise!'' every evening 😂');
+insert into private.bot_lines (pack, tone, body) values
+  ('food', null, 'Hungry, {name}? 😋 Don''t skip meals, studying on an empty stomach is a no-no.'),
+  ('food', null, 'Jollof, beans or indomie and egg, {name}? Tough choice 😄'),
+  ('food', null, 'Cooking at home is cheaper than eating out every day, {name}. Try batch cooking!'),
+  ('food', null, 'Drink enough water too, {name} 💧 It helps with focus.'),
+  ('food', 'jokes', 'Food is love, {name}. And cafeteria queue is a test of patience 😂'),
+  ('food', 'sporty', 'Good food, good energy, {name}. Eat well before a game 🍚'),
+  ('food', null, '{food} sounds good right now, {name} 😋'),
+  ('food', null, 'Try to add some vegetables to your meal, {name}. Your body will thank you.'),
+  ('food', null, 'Eating early before lectures helps focus, {name}.'),
+  ('food', null, 'Share a pot with roommates, {name}. Cheaper and tastier.'),
+  ('food', null, 'Don''t forget water with your meal, {name} 💧'),
+  ('food', null, 'Fruit is a cheap snack, {name}: banana, orange or pawpaw.'),
+  ('food', null, 'Eggs are a quick, cheap protein, {name}.'),
+  ('food', 'jokes', 'Food is my love language, {name} 😂'),
+  ('food', 'sporty', 'Good carbs before a game, {name}. Rice or yam works 🍚');
+insert into private.bot_lines (pack, tone, body) values
+  ('football', null, 'Football talk? Count me in, {name} ⚽ Which team do you support?'),
+  ('football', null, 'DLS or eFootball, {name}? Check the Gamers forum to find a squad or share tips 🎮'),
+  ('football', null, 'Match day is the best, {name}! Who do you think wins?'),
+  ('football', null, 'Don''t forget the Campus Dash arcade game, {name}, it''s a nice break between matches!'),
+  ('football', 'sporty', '{name}, my money''s on a late goal today ⚽🔥'),
+  ('football', 'jokes', 'Football makes grown men cry and students shout, {name} 😂'),
+  ('football', null, 'It''s always a good match when friends are watching together, {name}!'),
+  ('football', null, 'Who''s your favourite player right now, {name}?'),
+  ('football', null, 'Football banter is the best part, {name}. Keep it friendly though 😄'),
+  ('football', null, 'Try a friendly game in DLS or eFootball, {name}. Check the Gamers forum for squads.'),
+  ('football', null, 'A good formation matters, {name}. Balance attack and defence.'),
+  ('football', null, 'Watching with friends beats watching alone, {name}.'),
+  ('football', null, 'Who do you think wins the league this season, {name}?'),
+  ('football', 'sporty', 'I love match day, {name}! Snacks ready? ⚽'),
+  ('football', 'jokes', 'My predictions are always wrong, {name} 😂 Bold of you to ask.');
+insert into private.bot_lines (pack, tone, body) values
+  ('game_app', null, 'Try Campus Dash in the Arcade, {name}! Jump the obstacles and collect coins to earn pocket money 🏃'),
+  ('game_app', null, 'The Feed, Tutorial and NEPA apps are on your phone, {name}. Have a look!'),
+  ('game_app', null, 'The ATM in the bank lets you manage your money, {name}. Don''t forget your daily claim 🏧'),
+  ('game_app', null, 'Walk into buildings on the map to do activities, {name}. Each place has something different.'),
+  ('game_app', null, 'The Global chat is for everyone, {name}. Tag people with @ to get their attention.'),
+  ('game_app', null, 'The Arcade has Campus Dash, {name}. Short rounds, nice for a quick break 🏃'),
+  ('game_app', null, 'You can read, post and help others in the Tutorial app, {name}.'),
+  ('game_app', null, 'Walk into buildings on the map, {name}. Each one has its own activities.'),
+  ('game_app', null, 'The Gamers forum is for DLS and eFootball fans, {name}.'),
+  ('game_app', null, 'Check NEPA before you plan your evening, {name} 💡'),
+  ('game_app', null, 'Global chat is the place to meet everyone, {name}. Tag with @ to get a reply.'),
+  ('game_app', null, 'Waving at players is the way to start a private chat, {name} 👋');
+insert into private.bot_lines (pack, tone, body) values
+  ('social', null, 'Campus is better with friends, {name}! Try joining a society or fellowship 🙌'),
+  ('social', null, 'A weekend movie or a football game with friends is a great way to relax, {name}.'),
+  ('social', null, 'Meeting new people is easier in groups, {name}. Say hi in the Global chat!'),
+  ('social', null, 'Music, gist and good vibes, {name}. That''s the campus life 😄'),
+  ('social', 'jokes', 'Gist is free, {name}. Spill it! 😂'),
+  ('social', null, 'Joining a club is a great way to make friends, {name}.'),
+  ('social', null, 'Campus events are fun, {name}. Watch the Feed for announcements.'),
+  ('social', null, 'Say hi in Global chat, {name}. Most people reply quickly 😊'),
+  ('social', null, 'A small group of good friends beats a big crowd, {name}.'),
+  ('social', null, 'Study dates in the library count as social time too, {name} 📚'),
+  ('social', null, 'Be the person who greets newcomers, {name}. It makes campus warmer.'),
+  ('social', 'jokes', 'My social life is mostly Global chat, {name} 😂'),
+  ('social', null, 'Music, football or books, {name}? Everyone has a thing.');
+insert into private.bot_lines (pack, tone, body) values
+  ('help', null, 'I''m not sure I can solve that one, {name}, but check the Tutorial app, there are guides from other students.'),
+  ('help', null, 'Try the Global chat, {name}. Other players might know. You can tag them with @.'),
+  ('help', null, 'Good question, {name}! Open the phone and look at the apps. Most things you need are there.'),
+  ('help', null, 'I''m still learning, {name}. Can you tell me a bit more?'),
+  ('help', null, 'I might not know that one, {name}, but the Tutorial app has guides from other players.'),
+  ('help', null, 'Try asking in Global chat, {name}. Someone usually knows.'),
+  ('help', null, 'Which part are you stuck on, {name}? Tell me more.'),
+  ('help', null, 'A senior in your department can usually help, {name}. Don''t be shy to ask.'),
+  ('help', null, 'Check the phone apps, {name}: many answers are inside.');
+insert into private.bot_lines (pack, tone, body) values
+  ('default', null, 'Interesting, {name}! Tell me more 😄'),
+  ('default', null, 'Hmm, I''m not sure I got that, {name}. Can you say it differently?'),
+  ('default', null, 'I''m just a simple campus bot, {name}, but I''m listening 🙂'),
+  ('default', null, 'That''s something, {name}! What made you think of it?'),
+  ('default', null, 'Haha okay {name}! What else is happening on campus?'),
+  ('default', null, 'Noted, {name}. By the way, how has your day been?'),
+  ('default', null, 'Got it, {name}. Anything on campus you want to gist about?'),
+  ('default', null, 'Sorry {name}, I may have missed that. Want to talk about school, food or football?'),
+  ('default', null, 'Okay {name}, I''m following. Go on.'),
+  ('default', null, 'Interesting, {name}! How did that happen?'),
+  ('default', null, 'I hear you, {name}.'),
+  ('default', null, 'Tell me more, {name}. I''m curious.'),
+  ('default', null, 'Hmm, that''s new to me, {name}. Can you explain?'),
+  ('default', null, 'Sorry {name}, I''m still learning. Can you rephrase that?'),
+  ('default', null, 'Noted, {name}! Anything else on your mind?'),
+  ('default', null, 'That''s a good point, {name}.'),
+  ('default', null, 'Ah okay {name}. What about the rest of your day?'),
+  ('default', null, 'I''m a small campus bot, {name}, so I may miss some things. Try different words 🙂'),
+  ('default', null, 'Got you, {name}. How''s your day going so far?'),
+  ('default', null, 'Alright {name}! Let''s talk about something fun: food, football, or campus gist?'),
+  ('default', 'jokes', 'Hmm {name}, my circuits are confused 😂 Say it again?'),
+  ('default', 'serious', 'Could you clarify, {name}? I want to answer properly.');
+insert into private.bot_lines (pack, tone, body) values
+  ('busy', null, 'Let me catch my breath, {name}. Talk to you a bit later! 😅'),
+  ('busy', null, 'I need a short break, {name}. Come back soon!'),
+  ('busy', null, 'Let me take a short break, {name}. We''ll talk soon 🙂'),
+  ('busy', null, 'I need a quick break, {name}. Catch you later!');
+insert into private.bot_lines (pack, tone, body) values
+  ('ambient', null, 'Who''s heading to the library today? 📚'),
+  ('ambient', null, 'The sun is serious today o ☀️'),
+  ('ambient', null, 'Anyone has tips for a quick lunch around campus?'),
+  ('ambient', null, 'Good luck to everyone with tests this week 🙏'),
+  ('ambient', null, 'Remember to drink water today 💧'),
+  ('ambient', null, 'What''s the best study spot on campus?'),
+  ('ambient', null, 'Charge your phones while there''s light o 🔌'),
+  ('ambient', null, 'Happy to see so many people on campus today!'),
+  ('ambient', null, 'Which course is giving you the most stress this semester? 😅'),
+  ('ambient', null, 'Anyone watching the match tonight? ⚽'),
+  ('ambient', null, 'Quick reminder: rest is part of studying 😴'),
+  ('ambient', null, 'Campus Dash in the Arcade is addictive, who''s beaten their best score? 🏃'),
+  ('ambient', null, 'Good morning campus! ☀️'),
+  ('ambient', null, 'Evening gist anyone?'),
+  ('ambient', null, 'Don''t forget to check the NEPA app for light updates 💡'),
+  ('ambient', null, 'Small wins count today, keep going 💪'),
+  ('ambient', null, 'If you''re new here: welcome! Ask anything, someone will answer 😊'),
+  ('ambient', null, 'Anyone needs a study partner this week?'),
+  ('ambient', null, 'Cafeteria queue today was a test of patience 😅'),
+  ('ambient', null, 'What''s everyone''s favourite campus food spot?'),
+  ('ambient', null, 'Anyone seen a good study spot today?'),
+  ('ambient', null, 'Reminder: stretch your legs between classes 🚶'),
+  ('ambient', null, 'What''s the plan for {day}?'),
+  ('ambient', null, '{team} fans, how are we feeling? ⚽'),
+  ('ambient', null, 'Craving {food} right now 😋'),
+  ('ambient', null, 'Who''s reading {course} tonight? Let''s share notes.'),
+  ('ambient', null, 'Please keep {place} clean for everyone 🙏'),
+  ('ambient', null, 'Traffic at {place} is something else today 😅'),
+  ('ambient', null, 'A cold {drink} would be perfect right now.'),
+  ('ambient', null, 'Anyone up for a quick game of {game}? 🎮'),
+  ('ambient', null, 'Hope your {course} test goes well {day}!'),
+  ('ambient', null, 'Charge your phone and power bank when there''s light 🔌'),
+  ('ambient', null, 'The weather today is perfect for reading outside ☀️'),
+  ('ambient', null, 'If you''re stressed about {course}, you''re not alone 💚'),
+  ('ambient', null, 'Which lecturer explains {course} best? Asking for a friend 😄'),
+  ('ambient', null, 'Make time for {food} today, you''ve earned it.'),
+  ('ambient', null, 'Be kind to freshers {day}, they''re still finding their way 🙌'),
+  ('ambient', null, 'Study group for {course}? Drop a hello.'),
+  ('ambient', null, 'Who else is excited about {day}?'),
+  ('ambient', null, 'Remember to sleep tonight. Your brain needs it 😴'),
+  ('ambient', null, 'Is {place} usually this crowded?'),
+  ('ambient', null, 'Sending good vibes to everyone with tests {day} 🍀'),
+  ('ambient', null, 'Quick tip: save your work often, NEPA is unpredictable 😅'),
+  ('ambient', null, '{team} or {team2}? Pick a side 😂'),
+  ('ambient', null, 'Say something nice to someone today 💛'),
+  ('ambient', null, 'A short walk after {course} class does wonders.'),
+  ('ambient', null, 'That moment when the lecturer ends class early 😍'),
+  ('ambient', null, 'Anyone tried the new spot near {place}?'),
+  ('ambient', null, 'Don''t skip breakfast, even {food} is better than nothing.'),
+  ('ambient', null, 'Good luck to everyone writing {course} {day} 🙏'),
+  ('ambient', null, 'Free tip: read your notes the same day you take them.'),
+  ('ambient', null, 'Weekend plan: rest, {food}, and a bit of {game} 😄'),
+  ('ambient', null, 'Library or hostel for reading tonight? Vote below 👇'),
+  ('ambient', null, 'Humble reminder: drink water 💧'),
+  ('ambient', null, 'How is everyone coping with {course} this semester?'),
+  ('ambient', null, 'Reminder to be on time for {day}''s lecture 😅'),
+  ('ambient', null, 'What song has been stuck in your head today? 🎶'),
+  ('ambient', null, 'A good laugh is part of studying too 😄'),
+  ('ambient', null, 'Anyone want to form a quiz group for {course}?'),
+  ('ambient', null, 'I think {place} has the best vibe right now.'),
+  ('ambient', null, 'New day, fresh start. Let''s go ☀️'),
+  ('ambient', null, 'Remember: bad days don''t last, but good friends do 💚'),
+  ('ambient', null, 'Who''s brave enough to try {food} with pepper? 🌶️'),
+  ('ambient', null, 'Anyone else love a rainy-day lecture? Cozy but sleepy 😅'),
+  ('ambient', null, 'Don''t forget to submit your assignments on time!'),
+  ('ambient', null, 'Respect to everyone balancing school and life 🙌'),
+  ('ambient', null, 'Cheer up, the weekend is closer than you think!'),
+  ('ambient', null, 'Today''s challenge: help one person with something small 🙂'),
+  ('ambient', null, 'Tell us your favourite {food} spot!'),
+  ('ambient', null, '{game} anyone? I''m in the mood 🎮'),
+  ('ambient', null, 'Hope you all had something to eat today 🍽️'),
+  ('ambient', null, 'Be proud of small progress today.'),
+  ('ambient', null, 'You don''t have to be perfect, just consistent 💪'),
+  ('ambient', null, 'Good vibes only on this chat, please 😊');
+insert into private.bot_lines (pack, tone, body) values
+  ('open', null, 'Haha,'),
+  ('open', null, 'Ah,'),
+  ('open', null, 'Oh nice,'),
+  ('open', null, 'Hmm,'),
+  ('open', null, 'True,'),
+  ('open', null, 'Ehn,'),
+  ('open', null, 'Oya,'),
+  ('open', null, 'Aha,'),
+  ('open', null, 'Well,'),
+  ('open', null, 'Okay,'),
+  ('open', null, 'Wow,'),
+  ('open', null, 'Seriously,'),
+  ('open', null, 'Honestly,'),
+  ('open', null, 'You know,'),
+  ('open', null, 'Ha,');
+insert into private.bot_lines (pack, tone, body) values
+  ('close', null, '🙏'),
+  ('close', null, '😄'),
+  ('close', null, '💪'),
+  ('close', null, 'You''ve got this.'),
+  ('close', null, 'Take it easy.'),
+  ('close', null, 'Stay positive.'),
+  ('close', null, 'Keep going!'),
+  ('close', null, 'No pressure.'),
+  ('close', null, 'Small steps count.'),
+  ('close', null, 'We move.'),
+  ('close', null, 'Be kind to yourself.'),
+  ('close', null, 'Rest well too.'),
+  ('close', null, 'Enjoy your day!'),
+  ('close', null, 'Good luck!');
+delete from private.bot_slots;
+insert into private.bot_slots (slot, val) values
+  ('place', 'the library'),
+  ('place', 'the cafeteria'),
+  ('place', 'the Student Union'),
+  ('place', 'the lecture theatre'),
+  ('place', 'the sports field'),
+  ('place', 'the bookshop'),
+  ('place', 'the health centre'),
+  ('place', 'the main gate'),
+  ('place', 'the hostel'),
+  ('place', 'the bank'),
+  ('place', 'the gym'),
+  ('place', 'the football pitch'),
+  ('food', 'jollof rice'),
+  ('food', 'beans and plantain'),
+  ('food', 'indomie and egg'),
+  ('food', 'yam and egg'),
+  ('food', 'amala and ewedu'),
+  ('food', 'fried rice'),
+  ('food', 'moi moi'),
+  ('food', 'pap and akara'),
+  ('food', 'spaghetti'),
+  ('food', 'shawarma'),
+  ('food', 'boiled rice and stew'),
+  ('food', 'puff-puff'),
+  ('course', 'Calculus'),
+  ('course', 'Physics'),
+  ('course', 'Chemistry'),
+  ('course', 'Programming'),
+  ('course', 'Thermodynamics'),
+  ('course', 'Biology'),
+  ('course', 'Statistics'),
+  ('course', 'Technical Writing'),
+  ('course', 'Engineering Drawing'),
+  ('course', 'GST'),
+  ('course', 'Mechanics'),
+  ('course', 'Algorithms'),
+  ('course', 'Organic Chemistry'),
+  ('course', 'Linear Algebra'),
+  ('team', 'Arsenal'),
+  ('team', 'Chelsea'),
+  ('team', 'Barcelona'),
+  ('team', 'Real Madrid'),
+  ('team', 'Man United'),
+  ('team', 'Liverpool'),
+  ('team', 'Man City'),
+  ('team', 'the Super Eagles'),
+  ('team', 'Napoli'),
+  ('team', 'Bayern'),
+  ('drink', 'zobo'),
+  ('drink', 'bottled water'),
+  ('drink', 'chapman'),
+  ('drink', 'a cold soft drink'),
+  ('drink', 'fura da nono'),
+  ('drink', 'tiger nut drink'),
+  ('drink', 'smoothie'),
+  ('game', 'DLS'),
+  ('game', 'eFootball'),
+  ('game', 'Campus Dash'),
+  ('game', 'chess'),
+  ('game', 'table tennis'),
+  ('game', 'foosball'),
+  ('game', 'ludo'),
+  ('team2', 'Arsenal'),
+  ('team2', 'Chelsea'),
+  ('team2', 'Barcelona'),
+  ('team2', 'Real Madrid'),
+  ('team2', 'Man United'),
+  ('team2', 'Liverpool'),
+  ('team2', 'Man City'),
+  ('team2', 'Napoli'),
+  ('team2', 'Bayern'),
+  ('food2', 'jollof rice'),
+  ('food2', 'beans and plantain'),
+  ('food2', 'indomie and egg'),
+  ('food2', 'yam and egg'),
+  ('food2', 'amala and ewedu'),
+  ('food2', 'fried rice'),
+  ('food2', 'moi moi'),
+  ('food2', 'spaghetti'),
+  ('food2', 'shawarma'),
+  ('food2', 'boiled rice and stew'),
+  ('day', 'tomorrow'),
+  ('day', 'this weekend'),
+  ('day', 'on Friday'),
+  ('day', 'next week'),
+  ('day', 'on Monday'),
+  ('day', 'later tonight');
+insert into private.bot_feed (body, bg) select v.b, v.g from (values
+  ('Exam week is coming. Start with your hardest course while your mind is fresh. You''ve got this! 📚', 'forest'),
+  ('Small reminder: drinking water, sleeping well and eating on time will help your CGPA more than one all-night read.', 'ocean'),
+  ('Anyone else love the quiet of the library early in the morning? Best time to read, no noise, no stress.', 'sunset'),
+  ('Tip: charge your power bank when there''s light, not when it''s already 5%. Your future self will thank you ⚡', 'gold'),
+  ('Campus Dash high score is hard to beat! Who''s the fastest runner here? 🏃', 'fire'),
+  ('Be kind to the new freshers. Everyone was lost on day one. A simple ''welcome'' goes a long way 🙌', 'rose'),
+  ('Study group idea: each person explains one topic to the rest. You learn twice as fast that way.', 'royal'),
+  ('Nothing beats jollof rice after a long lecture. What''s your favourite campus meal? 🍛', 'sunset'),
+  ('Reminder: your health matters more than any assignment. Rest, eat and take breaks.', 'mint'),
+  ('Football season is back! Who are you supporting this weekend? ⚽', 'forest'),
+  ('Use the Tutorial app to share what you know. Someone out there needs exactly your tip.', 'royal'),
+  ('The sunset over campus today was beautiful. Take a minute to look up from your phone 🌇', 'dusk'),
+  ('Early lectures are brutal, but sitting in front makes you pay attention more. Try it once!', 'slate'),
+  ('Plan your week on Sunday night: lectures, assignments, rest. It takes 10 minutes and saves hours.', 'ocean'),
+  ('Roommate tip: talk about the rules early. A calm conversation beats a silent fight every time 🏠', 'lagos'),
+  ('Never share your passwords or bank details with anyone online, not even people you trust. Stay safe!', 'midnight'),
+  ('Who else is counting down to the weekend? 😅 What''s the plan?', 'rose'),
+  ('Notes tip: after each lecture, write three lines of what you understood. Review them the same night.', 'forest'),
+  ('DLS players: share your best tips in the Gamers forum. Let''s help each other get better 🎮', 'royal'),
+  ('Take the walk between classes slowly sometimes. Fresh air clears the head.', 'mint'),
+  ('Good morning campus! New day, new chances. Go and make it count ☀️', 'gold'),
+  ('Budget check: how much did you spend on data this week? A small note on your phone helps a lot 💰', 'slate'),
+  ('Feeling stressed? You''re not alone. Talk to a friend, breathe, and take it one task at a time 💚', 'ocean'),
+  ('The cafeteria queue has taught me more patience than any lecture 😂', 'fire'),
+  ('Presentation coming up? Practice out loud once. The nerves drop by half, promise.', 'lagos'),
+  ('Make one new friend this week outside your department. Campus is bigger than your class!', 'dusk'),
+  ('Past questions are not cheating, they''re practice. Do them under time like a real exam.', 'forest'),
+  ('Late-night reading? Keep a bottle of water close and take a short break every hour.', 'midnight'),
+  ('What''s one thing you''re proud of this week, big or small? Let''s hear it 🌟', 'sunset'),
+  ('Cooking at home with friends is cheaper and more fun than eating out every day 🍳', 'mint'),
+  ('Tip for freshers: learn where the library, health centre and your lecture halls are in the first week.', 'ocean'),
+  ('A tidy room is a tidy mind. Ten minutes of cleaning before you study makes a difference.', 'rose'),
+  ('Check the NEPA app before you plan your night. Light status helps everyone prepare 💡', 'gold'),
+  ('Group assignments go smoother when roles are clear from day one. Who does what, by when?', 'royal'),
+  ('Weekend plan: rest, laundry, a bit of reading, and a good movie. Balance is everything.', 'dusk'),
+  ('Don''t compare your chapter 1 to someone else''s chapter 10. Keep going at your own pace 💪', 'slate'),
+  ('Shout-out to the lecturers who explain things twice without sighing 🙏', 'forest'),
+  ('Try the Arcade for 5 minutes between study sessions. A short break keeps you sharp 🎮', 'fire'),
+  ('Whoever is reading this: you''re doing better than you think. Keep going.', 'rose'),
+  ('Weather is nice, so open the window and read outside for a change 🌤️', 'sunset'),
+  ('If you can''t understand a topic, try a different source. A new explanation can make it click.', 'ocean'),
+  ('Always check that you''ve saved your assignment before the power goes off. Ask me how I know 😅', 'midnight'),
+  ('Looking for a study partner for the coming week. Drop a hello in the Global chat!', 'lagos'),
+  ('Keep your phone on silent during lectures. Your future self (and your lecturer) will appreciate it 🤫', 'slate'),
+  ('Healthy snack idea: groundnuts and a banana. Cheap, filling and easy to carry.', 'mint'),
+  ('The best revision is the one you actually do. Start with 25 minutes, no phone.', 'gold'),
+  ('Remember to say thank you to the people who keep the campus clean and safe. They deserve it 🙏', 'dusk'),
+  ('Anyone know a good spot to read in the evening? Share your favourite corner of campus!', 'forest'),
+  ('Friendly reminder: be careful with offers that sound too good to be true. Protect your money and your data.', 'midnight'),
+  ('Hot take: {food} is the best meal for a busy exam week. Easy, cheap and filling 🍽️', 'sunset'),
+  ('If you''re reading {course} tonight, start with the past questions. They show you what really matters.', 'forest'),
+  ('Study tip: switch between {course} and something lighter every hour so your brain stays fresh.', 'ocean'),
+  ('Small win of the day: finished one {course} topic I had been dodging. Do one hard thing early today 💪', 'gold'),
+  ('{place} is so peaceful in the early morning. Try it before the crowd arrives.', 'dusk'),
+  ('Who is watching {team} {day}? Let''s keep the banter friendly ⚽', 'forest'),
+  ('Reminder: a short walk to {place} between classes can reset a tired mind.', 'mint'),
+  ('Ask for help early. Nobody gets through {course} alone, and everyone is a beginner once.', 'royal'),
+  ('Don''t wait for motivation. Start with five minutes of {course} and see what happens.', 'rose'),
+  ('Anyone up for a friendly game of {game} {day}? Check the Gamers forum 🎮', 'royal'),
+  ('The queue at {place} is long again, but at least it''s a good time to review notes 😅', 'slate'),
+  ('Compliment of the day: to the person who held the door for a stranger today. It matters 🙏', 'rose'),
+  ('Plan {day} tonight: three tasks only. Done is better than perfect.', 'ocean'),
+  ('If {course} is stressing you, write down just the topics you don''t understand yet. The list is shorter than you think.', 'midnight'),
+  ('Sunday reset: clean your space, charge your devices, plan your week. Future you says thanks.', 'mint'),
+  ('A cold {drink} and a quiet corner of {place}. That''s the study session I''m having today.', 'sunset'),
+  ('Revision buddies make {course} less scary. Find one person and swap questions.', 'forest'),
+  ('Good morning! Today''s tiny goal: drink water, eat well, and attend every class 💧', 'gold'),
+  ('Be patient with yourself. Learning {course} takes repetition, not genius.', 'dusk'),
+  ('Thank you to everyone who keeps {place} clean. Small things make campus better 🌿', 'mint'),
+  ('Don''t forget to back up your assignments before the power goes. Ask me how I learned 😂', 'fire'),
+  ('Plan: one hour of {course}, one short break, one hour of reading something you enjoy.', 'lagos'),
+  ('Football fans: {team} versus {team2} is always a fun debate. Keep it kind 😄', 'fire'),
+  ('Remember that your worth is not your CGPA. Work hard, but be kind to yourself 💚', 'rose'),
+  ('When {course} feels impossible, slow down and break the problem into small parts.', 'ocean'),
+  ('Try this: before bed, write three things you''ll do tomorrow. You''ll wake up with a plan.', 'midnight'),
+  ('If you see a new face at {place}, say hello. Everyone needs a friendly first week 🙌', 'sunset'),
+  ('Anyone else love the smell of {food} drifting around campus at lunch time? 😋', 'gold'),
+  ('Save a little each week, even if it''s tiny. A habit matters more than the amount.', 'slate'),
+  ('Public speaking tip: slow down. Most nervous speakers talk twice as fast as they think.', 'royal'),
+  ('Phone on silent during lectures, please. Your lecturer and your classmates will thank you 🤫', 'slate'),
+  ('Healthy routine check: water, sleep, one proper meal. Everything else is easier after that.', 'mint'),
+  ('Campus challenge for {day}: greet three people you don''t know. Go!', 'sunset'),
+  ('I find {course} easier when I draw it out. Try diagrams, not just text ✏️', 'ocean'),
+  ('Spending check: how much did you spend on snacks this week? Just curious 😅', 'gold'),
+  ('The best time to start revising for {course} was last week. The second best time is now.', 'forest'),
+  ('Good luck to everyone with a test {day}. Read, rest, and believe 🍀', 'dusk'),
+  ('Sometimes a break is the most productive thing you can do. Step away for ten minutes.', 'lagos'),
+  ('Small kindness: share your notes with a classmate who missed a lecture 📒', 'rose'),
+  ('Late-night reading at {place}? Pack water and a light snack. Trust me.', 'midnight'),
+  ('Weekend vibes: {food}, a good movie, and no guilt. Rest is part of the plan.', 'sunset'),
+  ('If you''re new here: the map, the phone apps and the Global chat are your three best friends.', 'royal'),
+  ('Who''s tried Campus Dash this week? Short breaks keep your mind sharp 🏃', 'fire'),
+  ('Be early to class {day}, sit near the front, and ask one question. Watch your grades move.', 'forest'),
+  ('Reminder: the people who help you matter more than any grade. Say thanks today 🙏', 'rose'),
+  ('Anyone has a good tip for staying awake during a long lecture? Asking for me 😂', 'slate'),
+  ('{course} makes sense after you stop memorising and start asking why. Try it.', 'ocean'),
+  ('Gratitude post: for friends, light, food and a working phone. Small things matter 🌟', 'gold'),
+  ('Keep your bag light and your goals clear. Both help on the walk to {place}.', 'dusk'),
+  ('Honest question: what''s one habit that made your semester easier? Share it below.', 'royal'),
+  ('Friendly reminder: not everyone who messages you has good intentions. Never share passwords or personal details.', 'midnight'),
+  ('A tidy notebook is a calm mind. Spend ten minutes organising your {course} notes.', 'mint'),
+  ('Anyone else get sleepy after {food}? Plan your reading before lunch, not after 😴', 'fire'),
+  ('Good friends, good food, good music: the simple recipe for a good weekend.', 'sunset'),
+  ('Pro tip: read the question twice before you answer it, in tests and in life.', 'slate'),
+  ('Tired of the same study spot? Try {place} for a change of scenery.', 'dusk'),
+  ('If your friend is quiet lately, check on them. A simple ''how are you really?'' can mean a lot 💚', 'rose'),
+  ('Time for a quick stretch! Stand up, roll your shoulders, take a deep breath.', 'mint'),
+  ('If you can explain {course} to a friend in your own words, you understand it.', 'forest'),
+  ('Good vibes to all the freshers finding their feet. You belong here 🙌', 'gold'),
+  ('The only bad question is the one you never asked. Ask your lecturer {day}.', 'royal'),
+  ('Anyone else organising their week around when there''s light? 😂 Charge everything first.', 'fire'),
+  ('Weather check: carry a small umbrella or a cap. Campus walks can surprise you ☔', 'ocean'),
+  ('Plan your meals for the week and you''ll save money, time and stress.', 'gold'),
+  ('{team} fans are quiet today. Is everything okay? 😂', 'fire'),
+  ('Pick one thing to improve this week: sleep, reading time, or phone time. Just one.', 'lagos'),
+  ('Tip for presentations: end with one clear sentence your audience will remember.', 'royal'),
+  ('The cafeteria queue is a perfect time to revise flashcards. Productivity unlocked 😄', 'slate'),
+  ('Everyone''s path is different. Your pace is your pace.', 'dusk'),
+  ('Reading outside {place} this evening. The breeze is doing half my work 🍃', 'mint'),
+  ('A good laugh with friends is as important as a good study session 😄', 'sunset'),
+  ('Early night, early rise: try it for three days and tell us how you feel.', 'midnight'),
+  ('Looking for a {game} partner for {day}. Be friendly, be fun 🎮', 'royal'),
+  ('Remember to read the course outline. It tells you exactly what you''ll be tested on.', 'forest'),
+  ('Be a good neighbour in the hostel: keep the noise down after 10 pm 🤫', 'slate'),
+  ('If you''re feeling low today, message a friend. You don''t have to carry it alone 💛', 'rose'),
+  ('Quick maths: 20 minutes of {course} a day is more than 2 hours a week. Start small.', 'ocean'),
+  ('Never share your login details with anyone. Not even a friend. Stay safe.', 'midnight'),
+  ('Anyone know a cheap, tasty {food} spot near {place}? Drop it below.', 'sunset'),
+  ('Revision is easier when you start with the topics you like. Build momentum first.', 'forest'),
+  ('Remember to submit before the deadline, not at the deadline 😅', 'fire'),
+  ('Compare yourself to who you were yesterday, not to someone else''s highlights.', 'dusk'),
+  ('Take the stairs, drink water, greet someone. Tiny wins add up.', 'mint'),
+  ('Notice the little things on campus today: the trees, the birds, the sunset. It helps.', 'dusk'),
+  ('If a group assignment feels messy, write down who does what. Clarity saves friendships.', 'royal'),
+  ('It''s okay to rest. Rested brains learn faster.', 'lagos'),
+  ('Make your own flashcards for {course}. The writing itself is revision.', 'ocean'),
+  ('Anyone else finds {place} calm at night? Safe and well lit is the key, always walk in groups.', 'midnight'),
+  ('Pause. Breathe. Then continue. You''re doing better than you think.', 'rose'),
+  ('Prediction: someone will say ''I''ll start tomorrow'' tonight. Let it be today 😄', 'fire'),
+  ('Good manners cost nothing: please, thank you and sorry go a long way on campus.', 'gold'),
+  ('{food} for lunch, a nap, then two hours of {course}. That''s the plan.', 'sunset'),
+  ('Always carry a pen. Always. Especially to a test 😂', 'slate'),
+  ('When things get tough, remember why you started. Then take one more step.', 'forest'),
+  ('Gist of the day: be kind, be curious, and be on time.', 'gold')
+) v(b, g) where not exists (select 1 from private.bot_feed f where f.body = v.b);
+insert into private.bot_tutorials (title, category, body) select v.t, v.c, v.b from (values
+  ('A simple weekly study timetable', 'Study', 'Pick your two hardest courses and give each one a fixed daily slot.
+1. Write your lectures first.
+2. Add study blocks of 45 minutes with 10-minute breaks.
+3. Leave one evening free for rest.
+Stick to it for two weeks and adjust. A plan you follow beats a perfect plan you ignore.'),
+  ('Charge smart during power cuts', 'Tech', 'Light comes and goes, so use it well.
+1. Charge your phone and power bank first.
+2. Lower your screen brightness and close apps you don''t use.
+3. Turn on battery saver when you''re under 30%.
+4. Check the NEPA app to see when light is back.'),
+  ('Budget your allowance in four steps', 'Money', '1. Write down what you receive for the month.
+2. Split it: food, data, transport, savings.
+3. Pay the must-haves first, then spend what''s left.
+4. Review every Sunday and adjust.
+Even a small saving habit adds up over a semester.'),
+  ('How to beat exam stress', 'Health', 'Stress is normal, but you can manage it.
+1. Sleep at least six hours, a tired brain forgets.
+2. Study in short blocks with breaks.
+3. Eat on time and drink water.
+4. Talk to a friend or a counsellor if it feels too heavy. You don''t have to handle it alone.'),
+  ('Make the most of past questions', 'Study', 'Past questions show you how lecturers think.
+1. Collect them from seniors and course reps.
+2. Do them under real exam time.
+3. Mark yourself honestly.
+4. Revisit the topics you missed.
+This is practice, not shortcuts. Understanding still comes first.'),
+  ('Stay safe online as a student', 'Tech', '1. Never share your password or bank details, even with people you trust.
+2. Be careful with links and offers that sound too good to be true.
+3. Use different passwords for important accounts.
+4. If something feels wrong, stop and ask someone you trust.'),
+  ('Settling in: your first week on campus', 'Campus life', '1. Locate your lecture halls, the library and the health centre.
+2. Meet your course mates and exchange contacts.
+3. Learn the safe routes and times to move around.
+4. Join one society or group that interests you.
+Asking questions is normal, everyone was new once.'),
+  ('Take notes that you can actually use', 'Study', '1. Write the topic and date at the top.
+2. Use your own words, not the lecturer''s sentences.
+3. Mark the parts you don''t understand and ask later.
+4. Review within 24 hours.
+Short, clear notes beat long messy ones.'),
+  ('Cheap and healthy eating on campus', 'Health', '1. Cook in bulk and share with a roommate.
+2. Add beans, eggs or vegetables to cheap staples.
+3. Carry water, it saves money and helps focus.
+4. Avoid skipping meals before lectures.
+Small habits keep you strong through the semester.'),
+  ('Learn a skill in 30 minutes a day', 'Skills', 'Pick one skill, like typing, basic Excel or public speaking.
+1. Choose a small daily goal.
+2. Practice for 30 minutes at the same time every day.
+3. Track your progress in a note.
+In three months you will notice a big difference.'),
+  ('Get along with your roommates', 'Campus life', '1. Talk about the rules early: noise, cleaning, visitors.
+2. Share chores fairly.
+3. Respect each other''s study time.
+4. Solve problems calmly, not through gossip.
+A peaceful room makes studying much easier.'),
+  ('Present with confidence', 'Skills', '1. Know your first sentence by heart.
+2. Practice out loud at least twice.
+3. Look at the audience, not the screen.
+4. Keep slides short.
+Nervous is normal. Breathe slowly and begin.'),
+  ('Protect your phone data and battery', 'Tech', '1. Turn off auto-updates on mobile data.
+2. Use Wi-Fi when it''s available.
+3. Close apps running in the background.
+4. Keep your phone cool and avoid charging under your pillow.
+These small steps save money and extend battery life.'),
+  ('Build a saving habit with small amounts', 'Money', 'You don''t need a lot to start.
+1. Save a fixed small amount whenever you receive money.
+2. Keep it separate from your spending money.
+3. Don''t touch it unless it''s a real emergency.
+Small regular savings become real money over time.'),
+  ('How to prepare for a lab session', 'Study', 'Read your lab manual the night before.
+1. Know the aim and the steps.
+2. Bring your lab coat, pen and notebook.
+3. Write observations immediately, not later.
+4. Ask the technician if something is unclear.
+A prepared student finishes faster and learns more.'),
+  ('Beat procrastination with five minutes', 'Skills', 'Tell yourself you will work for just five minutes.
+1. Put your phone in another room.
+2. Set a five-minute timer and start.
+3. When it rings, decide whether to continue.
+Most of the time you will keep going. Starting is the hardest part.'),
+  ('Write a clear assignment', 'Study', '1. Read the question twice and underline key words.
+2. Make a short outline: introduction, main points, conclusion.
+3. Write in simple sentences.
+4. Read it aloud once to catch mistakes.
+Clear and complete is better than long and confusing.'),
+  ('Healthy sleep habits for students', 'Health', '1. Sleep and wake at similar times every day.
+2. Keep your phone away from the bed.
+3. Avoid heavy meals late at night.
+4. If you can''t sleep, read something light.
+Good sleep improves memory, mood and focus.'),
+  ('Use your phone to study better', 'Tech', '1. Turn off notifications during study blocks.
+2. Use a timer app for focused sessions.
+3. Keep notes in one folder, named by course.
+4. Download materials on Wi-Fi to save data.
+Your phone can be a study tool, not only a distraction.'),
+  ('Make friends in your first semester', 'Campus life', '1. Sit with different people in lectures.
+2. Join a study group or society.
+3. Ask simple questions: name, course, hostel.
+4. Be the one who says hello first.
+Friendships take time, so be patient and kind.'),
+  ('Plan a simple monthly budget', 'Money', '1. Write down your total income for the month.
+2. List must-have costs: food, transport, data.
+3. Set a small saving target.
+4. Split what remains across weeks.
+Check it every Sunday and adjust.'),
+  ('Stay focused during long lectures', 'Study', '1. Sit near the front.
+2. Write short notes, not full sentences.
+3. Drink water and eat before class.
+4. Note questions to ask after.
+Active listening beats passive sitting.'),
+  ('Basic typing and computer skills', 'Skills', '1. Learn to type without looking at the keys.
+2. Practise ten minutes daily.
+3. Learn shortcuts like copy, paste and save.
+4. Keep your files in tidy folders.
+These skills help in every course and every job.'),
+  ('Handle exam day calmly', 'Health', '1. Prepare your things the night before.
+2. Eat a light breakfast and arrive early.
+3. Read all instructions first.
+4. Start with questions you know.
+5. Breathe slowly if you panic.
+A calm mind remembers more.'),
+  ('Stay safe on campus', 'Campus life', '1. Walk in groups at night and use lit paths.
+2. Keep valuables out of sight.
+3. Know where security and the health centre are.
+4. Share your location with a trusted friend.
+Safety habits cost nothing and protect a lot.'),
+  ('Build a reading habit', 'Skills', 'Pick a book you enjoy, not only textbooks.
+1. Read ten pages a day.
+2. Choose a fixed time.
+3. Keep the book where you can see it.
+A reading habit improves vocabulary, focus and writing.'),
+  ('Communicate well in group projects', 'Campus life', '1. Choose one way to communicate and stick to it.
+2. Assign roles and deadlines.
+3. Meet early, not just before the deadline.
+4. Give feedback kindly and clearly.
+Good teamwork is a skill employers notice.'),
+  ('Save data on your phone', 'Tech', '1. Turn off auto-play for videos.
+2. Download large files on Wi-Fi only.
+3. Set a data limit in your phone settings.
+4. Close apps running in the background.
+These small steps can stretch your data a long way.'),
+  ('Manage stress with a simple routine', 'Health', '1. Take five slow breaths when you feel overwhelmed.
+2. Move your body: a short walk or stretching.
+3. Write down what''s worrying you.
+4. Talk to a friend or counsellor.
+Stress is normal, and asking for help is a strength.'),
+  ('Prepare for your first presentation', 'Skills', '1. Start with a simple structure: opening, three points, closing.
+2. Use big words on slides, not paragraphs.
+3. Practise in front of a friend.
+4. Speak slowly and breathe.
+Your first one is the hardest, and then it gets easier.')
+) v(t, c, b) where not exists (select 1 from private.bot_tutorials x where x.title = v.t);
+insert into private.bot_scenes (scene, step, role, body, reply_step) values
+  ('library', 1, 1, 'Is the library crowded today? 📚', null),
+  ('library', 2, 2, 'Not too bad. The ground floor is full but upstairs has space.', 1),
+  ('library', 3, 1, 'Perfect, heading there now. Thanks!', 2),
+  ('jollof', 1, 1, 'The {food} at the cafeteria is sold out again 😩', null),
+  ('jollof', 2, 2, 'Same story every day 😂 Try the buka near the gate.', 1),
+  ('jollof', 3, 3, 'Their {food} is serious business 🔥', 2),
+  ('jollof', 4, 1, 'Say less, I''m going!', 3),
+  ('light', 1, 1, 'Who has light in their hostel right now?', null),
+  ('light', 2, 2, 'None here o 😭', 1),
+  ('light', 3, 3, 'We have! Come charge your phone if you''re close 😄', 2),
+  ('exam', 1, 1, 'Test tomorrow and I haven''t started 😅', null),
+  ('exam', 2, 2, 'Start with the topics you fear most. Two hours of focus is enough to cover a lot.', 1),
+  ('exam', 3, 1, 'Okay, no phone for two hours. Wish me luck 🙏', 2),
+  ('exam', 4, 2, 'You''ll be fine! Sleep early too.', 3),
+  ('football', 1, 1, 'Who''s watching the match tonight? ⚽', null),
+  ('football', 2, 2, 'Me o! Who are you backing?', 1),
+  ('football', 3, 1, 'My team to win 2-1, don''t laugh at me 😂', 2),
+  ('football', 4, 3, 'Prediction is free, let''s see 😄', 1),
+  ('dls', 1, 1, 'Anyone here good at DLS? I need a friendly game 🎮', null),
+  ('dls', 2, 2, 'I''m in! Check the Gamers forum to find squads too.', 1),
+  ('dls', 3, 1, 'Nice, will do. Let''s play later this evening.', 2),
+  ('freshers', 1, 1, 'First week on campus and everything feels new 😅', null),
+  ('freshers', 2, 2, 'Welcome! It gets easier. Learn where the library and your halls are first.', 1),
+  ('freshers', 3, 3, 'And don''t be shy to ask for directions. Everyone was lost once 🙌', 1),
+  ('freshers', 4, 1, 'Thank you both, this helps a lot!', 3),
+  ('study', 1, 1, 'What''s your best way to study at night?', null),
+  ('study', 2, 2, 'Small blocks: 45 minutes reading, 10 minutes break. Works every time.', 1),
+  ('study', 3, 3, 'And water by your side. I forget to drink otherwise 😂', 1),
+  ('weekend', 1, 1, 'What''s the weekend plan?', null),
+  ('weekend', 2, 2, 'Laundry, reading and maybe a movie 😴', 1),
+  ('weekend', 3, 3, 'I''ll be at the football viewing, you''re all invited ⚽', 1),
+  ('weekend', 4, 1, 'Count me in for the movie 🍿', 2),
+  ('arcade', 1, 1, 'Who has the highest score in Campus Dash? 🏃', null),
+  ('arcade', 2, 2, 'I got 1,200 yesterday. Still chasing more!', 1),
+  ('arcade', 3, 3, 'Hmm, challenge accepted 😄', 2),
+  ('hostel', 1, 1, 'Roommate issues, how do you handle them?', null),
+  ('hostel', 2, 2, 'Talk early and calmly. Set simple rules for noise and cleaning.', 1),
+  ('hostel', 3, 3, 'And switch off the TV when someone is reading. Respect goes both ways 🙏', 1),
+  ('hostel', 4, 1, 'Thanks, I''ll try that.', 2),
+  ('hungry', 1, 1, 'I''m so hungry and my allowance is almost finished 😭', null),
+  ('hungry', 2, 2, 'Indomie and egg is the classic rescue 😂', 1),
+  ('hungry', 3, 3, 'Try cooking with a friend and share the cost. Cheaper and fun.', 1),
+  ('lecture', 1, 1, 'Lecturer just ended class 20 minutes late again 😅', null),
+  ('lecture', 2, 2, 'At least he explained well! The topic was tough.', 1),
+  ('lecture', 3, 3, 'I''m still lost on that last part. Can someone explain?', 2),
+  ('lecture', 4, 2, 'I''ll share my notes in a Tutorial post later.', 3),
+  ('goodmorning', 1, 1, 'Good morning campus! ☀️ Let''s make today count.', null),
+  ('goodmorning', 2, 2, 'Good morning! Coffee first, then classes 😄', 1),
+  ('goodmorning', 3, 3, 'Morning all! Don''t forget to eat breakfast.', 1),
+  ('assignment', 1, 1, 'Assignment due tomorrow. Who else is up late? 😅', null),
+  ('assignment', 2, 2, 'Me! Submitting at the last minute is a lifestyle 😂', 1),
+  ('assignment', 3, 3, 'Don''t forget to save it before NEPA takes light 😩', 1),
+  ('assignment', 4, 1, 'True, saving now!', 3),
+  ('music', 1, 1, 'What songs are you listening to this week? 🎧', null),
+  ('music', 2, 2, 'Mostly Afrobeats while studying. It keeps me going.', 1),
+  ('music', 3, 3, 'Instrumentals for me. Lyrics distract me when I read.', 1),
+  ('tip', 1, 1, 'Quick tip: do past questions under real exam time. It shows your gaps fast.', null),
+  ('tip', 2, 2, 'Facts! It also builds your speed.', 1),
+  ('tip', 3, 3, 'Where do you find them? Anyone has a good source?', 1),
+  ('tip', 4, 1, 'Ask your course reps and seniors in your department.', 3),
+  ('rest', 1, 1, 'I''m burnt out this week 😩', null),
+  ('rest', 2, 2, 'Take a proper break. Sleep and a short walk can reset you.', 1),
+  ('rest', 3, 3, 'You''re not alone. Everyone feels it around this time. Be kind to yourself 💚', 1),
+  ('rest', 4, 1, 'Thank you both, I needed to hear that.', 3),
+  ('night', 1, 1, 'Anyone still awake? Reading for a test.', null),
+  ('night', 2, 2, 'Yes! Taking a water break. How''s it going?', 1),
+  ('night', 3, 1, 'Slowly, but I''m getting there. Almost done with one topic.', 2),
+  ('map', 1, 1, 'Just discovered you can walk into buildings and do activities. This game is fun!', null),
+  ('map', 2, 2, 'Yes! Try the gym and the library. Each place has its own thing.', 1),
+  ('map', 3, 3, 'And the ATM in the bank gives a daily claim. Don''t miss it 🏧', 2),
+  ('food_find', 1, 1, 'Where can I get good {food} around campus?', null),
+  ('food_find', 2, 2, 'Try the spot near {place}. Not too expensive.', 1),
+  ('food_find', 3, 3, 'Agree! Go before 1 pm, they finish fast 😅', 2),
+  ('food_find', 4, 1, 'Thanks both, heading there.', 3),
+  ('course_help', 1, 1, 'Anyone understand {course}? I''m completely lost 😭', null),
+  ('course_help', 2, 2, 'Start with the basics. Which topic is confusing you?', 1),
+  ('course_help', 3, 1, 'The part from last week''s lecture.', 2),
+  ('course_help', 4, 3, 'Join us at {place} later, we''re going through it.', 1),
+  ('game_night', 1, 1, 'Who''s free for {game} tonight? 🎮', null),
+  ('game_night', 2, 2, 'Count me in! What time?', 1),
+  ('game_night', 3, 1, 'Around 8 pm.', 2),
+  ('game_night', 4, 3, 'I''ll join as well, bring snacks 😂', 1),
+  ('match_talk', 1, 1, '{team} fans, how are we feeling today? ⚽', null),
+  ('match_talk', 2, 2, 'Nervous o 😂 It could go either way.', 1),
+  ('match_talk', 3, 3, 'Whatever happens, no wahala. Banter only!', 2),
+  ('light_report', 1, 1, 'Light is back at {place}!', null),
+  ('light_report', 2, 2, 'Finally! Charging everything now 🔌', 1),
+  ('light_report', 3, 3, 'Thank you for the update. Spreading the news.', 1),
+  ('no_light', 1, 1, 'Anyone has light around {place}?', null),
+  ('no_light', 2, 2, 'Nope, been out for hours.', 1),
+  ('no_light', 3, 3, 'I''ll check the NEPA app, maybe there''s a report.', 1),
+  ('no_light', 4, 1, 'Good idea, thanks!', 3),
+  ('test_nerves', 1, 1, 'Test on {course} {day} and my nerves are shaking 😅', null),
+  ('test_nerves', 2, 2, 'Breathe. Do past questions tonight, then sleep well.', 1),
+  ('test_nerves', 3, 3, 'Eat something before the test too. It really helps.', 2),
+  ('test_nerves', 4, 1, 'Okay, thank you both!', 3),
+  ('weekend_plan', 1, 1, 'What''s everyone doing {day}?', null),
+  ('weekend_plan', 2, 2, 'Sleep first, then maybe {game} with friends.', 1),
+  ('weekend_plan', 3, 3, 'Laundry and {food}. Not glamorous, but necessary 😂', 1),
+  ('weekend_plan', 4, 1, 'Same energy honestly.', 3),
+  ('tutorial_shout', 1, 1, 'Has anyone read the new guide in the Tutorial app?', null),
+  ('tutorial_shout', 2, 2, 'Yes! The part about {course} was helpful.', 1),
+  ('tutorial_shout', 3, 3, 'I''ll check it out later today.', 1),
+  ('study_spot', 1, 1, 'Where do you all study best? I need a new spot.', null),
+  ('study_spot', 2, 2, '{place} is quiet in the afternoon.', 1),
+  ('study_spot', 3, 3, 'I prefer the hostel at night, with no distractions.', 1),
+  ('study_spot', 4, 1, 'Thanks, I''ll try {place} tomorrow.', 2),
+  ('timetable', 1, 1, 'Does anyone have the updated timetable for {course}?', null),
+  ('timetable', 2, 2, 'Ask your course rep, they usually have the latest.', 1),
+  ('timetable', 3, 3, 'Or check the notice board at the faculty.', 2),
+  ('timetable', 4, 1, 'Will do, thanks!', 3),
+  ('sleep', 1, 1, 'I slept for 3 hours and I have lectures all day 😴', null),
+  ('sleep', 2, 2, 'Water and a short walk will help. Nap if you can.', 1),
+  ('sleep', 3, 3, 'And go to bed early tonight, okay?', 1),
+  ('roommate_fun', 1, 1, 'My roommate cooked {food} and I''m emotional 😍', null),
+  ('roommate_fun', 2, 2, 'Keep that roommate! 😂', 1),
+  ('roommate_fun', 3, 3, 'Good roommates are rare. Appreciate them.', 2),
+  ('roommate_fun', 4, 1, 'I''ll say thank you properly.', 3),
+  ('lost_found', 1, 1, 'Did anyone see a black bag near {place}? A friend lost one.', null),
+  ('lost_found', 2, 2, 'I''ll look out for it and ask around.', 1),
+  ('lost_found', 3, 3, 'Try the security post too, they keep lost items.', 1),
+  ('lost_found', 4, 1, 'Thank you!', 3),
+  ('cheer_up', 1, 1, 'Rough day today, ngl.', null),
+  ('cheer_up', 2, 2, 'Sorry about that. Want to gist about it?', 1),
+  ('cheer_up', 3, 3, 'Tomorrow is a fresh start. Rest well tonight.', 1),
+  ('cheer_up', 4, 1, 'Thanks, that helps.', 3),
+  ('new_here', 1, 1, 'I''m new here. Any advice for finding my way around?', null),
+  ('new_here', 2, 2, 'Open the map and walk into buildings. You''ll learn fast.', 1),
+  ('new_here', 3, 3, 'And say hi in Global chat. People are friendly.', 1),
+  ('new_here', 4, 1, 'Thank you, that makes me feel better 🙌', 3),
+  ('drink_break', 1, 1, 'Anyone want to grab {drink} at {place}?', null),
+  ('drink_break', 2, 2, 'Yes, I need a break from {course}.', 1),
+  ('drink_break', 3, 3, 'Save me a seat!', 1),
+  ('procrastinate', 1, 1, 'I keep saying I''ll start {course} later 😂', null),
+  ('procrastinate', 2, 2, 'Same! Try just five minutes. It usually turns into an hour.', 1),
+  ('procrastinate', 3, 3, 'Put the phone in another room. Works for me.', 2),
+  ('procrastinate', 4, 1, 'Doing it right now. Wish me luck.', 3),
+  ('compliment', 1, 1, 'Shout out to whoever shared the {course} notes yesterday. You saved me 🙏', null),
+  ('compliment', 2, 2, 'That was me! Happy to help.', 1),
+  ('compliment', 3, 3, 'This is why this chat is good. Everyone helps.', 2),
+  ('quiz_time', 1, 1, 'Quick quiz: how many hours of sleep do you actually need?', null),
+  ('quiz_time', 2, 2, 'At least seven, but I get five 😅', 1),
+  ('quiz_time', 3, 3, 'Seven to nine. Your brain needs it to store what you learn.', 1),
+  ('quiz_time', 4, 2, 'Okay, bedtime earlier tonight.', 3),
+  ('cafeteria_queue', 1, 1, 'The queue at {place} is crazy today 😩', null),
+  ('cafeteria_queue', 2, 2, 'Try going a bit earlier next time.', 1),
+  ('cafeteria_queue', 3, 3, 'Or take a book and use the waiting time to revise.', 2),
+  ('cafeteria_queue', 4, 1, 'Revising {course} in a queue, here we go 😂', 3),
+  ('group_work', 1, 1, 'Group assignment for {course}: how do you split tasks fairly?', null),
+  ('group_work', 2, 2, 'Write each person''s name and a task, with a deadline.', 1),
+  ('group_work', 3, 3, 'And check in halfway. It avoids last-minute panic.', 2),
+  ('group_work', 4, 1, 'Great, I''ll suggest that.', 3),
+  ('night_walk', 1, 1, 'Reminder: walk in groups at night and stay on lit paths 🙏', null),
+  ('night_walk', 2, 2, 'Good advice. Safety first.', 1),
+  ('night_walk', 3, 3, 'Also share your location with a friend when you walk alone.', 1),
+  ('music_share', 1, 1, 'Drop a song for studying. Something calm.', null),
+  ('music_share', 2, 2, 'Lo-fi beats work for me.', 1),
+  ('music_share', 3, 3, 'Instrumental Afrobeats if you want energy without lyrics.', 1),
+  ('music_share', 4, 1, 'Thanks, adding both to my playlist 🎧', 3),
+  ('ask_dls', 1, 1, 'Which formation works best in DLS right now?', null),
+  ('ask_dls', 2, 2, 'Balanced setups with a solid midfield. Check the forum for more.', 1),
+  ('ask_dls', 3, 3, 'And practise passing. Basics win matches.', 2),
+  ('freshers_tip', 1, 1, 'Freshers, drink water, attend lectures, and don''t compare yourself to others 🙌', null),
+  ('freshers_tip', 2, 2, 'And say hello to people. Friends make school easier.', 1),
+  ('freshers_tip', 3, 3, 'Also keep your belongings safe in the hostel.', 2),
+  ('bday', 1, 1, 'Happy birthday to everyone celebrating today! 🎉', null),
+  ('bday', 2, 2, 'Yes! Enjoy your day and eat well 🍰', 1),
+  ('bday', 3, 3, 'Wishing you a great year ahead!', 1),
+  ('results', 1, 1, 'Results are out for some courses. How are we feeling?', null),
+  ('results', 2, 2, 'Nervous but ready to face it.', 1),
+  ('results', 3, 3, 'Whatever the result, one grade doesn''t define you. Keep going.', 2),
+  ('results', 4, 1, 'True. Thanks for the reminder.', 3),
+  ('allowance', 1, 1, 'My allowance and I are not on speaking terms this week 😭', null),
+  ('allowance', 2, 2, 'Budget the rest by day, it helps. Cook if you can.', 1),
+  ('allowance', 3, 3, 'And avoid impulse buying. It adds up so fast.', 2),
+  ('allowance', 4, 1, 'Noted, thank you.', 3),
+  ('rain', 1, 1, 'Rain is falling and I have a lecture in 10 minutes 😩', null),
+  ('rain', 2, 2, 'Run for it and carry something to cover your notes!', 1),
+  ('rain', 3, 3, 'Lecturers understand. Arrive and dry your books 😂', 2),
+  ('chess', 1, 1, 'Anyone up for a quick game of chess at {place}?', null),
+  ('chess', 2, 2, 'I''m in. I''ll bring a board.', 1),
+  ('chess', 3, 3, 'Can I watch and learn?', 1),
+  ('chess', 4, 2, 'Of course, the more the merrier.', 3),
+  ('foodie', 1, 1, 'Rate your top 3 campus meals. Mine: {food}, {food2}, and anything with plantain 😂', null),
+  ('foodie', 2, 2, '{food2} always wins for me.', 1),
+  ('foodie', 3, 3, 'You can''t go wrong with {food}.', 1),
+  ('library_rules', 1, 1, 'Friendly reminder: keep your phone on silent in {place} 🤫', null),
+  ('library_rules', 2, 2, 'Yes please, some of us are trying to focus.', 1),
+  ('library_rules', 3, 3, 'Headphones are your friend too.', 2),
+  ('reading_group', 1, 1, 'Starting a small reading group for {course}. Who''s interested?', null),
+  ('reading_group', 2, 2, 'Count me in. Days and time?', 1),
+  ('reading_group', 3, 3, 'I''m free {day}. Let''s do an hour.', 2),
+  ('reading_group', 4, 1, 'Perfect, I''ll create a plan.', 3),
+  ('hustle', 1, 1, 'Any student side hustles that don''t affect your studies?', null),
+  ('hustle', 2, 2, 'Tutoring juniors, graphic design or typing assignments.', 1),
+  ('hustle', 3, 3, 'Just be careful with scams and don''t pay to receive anything.', 2),
+  ('hustle', 4, 1, 'Good tips, thank you.', 3),
+  ('goal', 1, 1, 'What''s one goal you have for this semester?', null),
+  ('goal', 2, 2, 'Keep a steady reading routine for {course}.', 1),
+  ('goal', 3, 3, 'Sleep better and finish assignments early.', 1),
+  ('goal', 4, 1, 'Both good. Mine is to stop procrastinating 😅', 3),
+  ('event_buzz', 1, 1, 'Is there anything happening on campus {day}?', null),
+  ('event_buzz', 2, 2, 'Check the Feed and your department notice board.', 1),
+  ('event_buzz', 3, 3, 'Sometimes societies announce things in Global chat too.', 2),
+  ('phone_battery', 1, 1, 'My phone is at 3% and there''s no light 😭', null),
+  ('phone_battery', 2, 2, 'Switch on battery saver and close all apps.', 1),
+  ('phone_battery', 3, 3, 'Find a power bank. Charge when you can.', 2),
+  ('phone_battery', 4, 1, 'Lesson learned. Charge early.', 3),
+  ('senior_advice', 1, 1, 'Seniors, what''s one thing you wish you knew in 100 level?', null),
+  ('senior_advice', 2, 2, 'Start reading early. Don''t wait for exams.', 1),
+  ('senior_advice', 3, 3, 'And make friends outside your department.', 1),
+  ('senior_advice', 4, 1, 'Thank you, writing this down.', 3),
+  ('sports_day', 1, 1, 'Anyone interested in a friendly game at {place} {day}?', null),
+  ('sports_day', 2, 2, 'Yes! What sport?', 1),
+  ('sports_day', 3, 1, 'Football, any level.', 2),
+  ('sports_day', 4, 3, 'I''m in. Let''s do it.', 1),
+  ('thank_you', 1, 1, 'Thanks to everyone who helps in this chat. It makes campus feel smaller 💚', null),
+  ('thank_you', 2, 2, 'That''s the spirit. We grow together.', 1),
+  ('thank_you', 3, 3, 'Always happy to help!', 1),
+  ('quiet_day', 1, 1, 'It''s quiet in here today. How is everyone?', null),
+  ('quiet_day', 2, 2, 'Busy day, but good. You?', 1),
+  ('quiet_day', 3, 1, 'Same, just taking a break.', 2),
+  ('quiet_day', 4, 3, 'Take your time. Chat is open whenever you need it.', 1),
+  ('caution_scam', 1, 1, 'Reminder: nobody legit asks you for your password or card details. Ever.', null),
+  ('caution_scam', 2, 2, 'Very true. Report and block if someone does.', 1),
+  ('caution_scam', 3, 3, 'And never pay to receive money or a job.', 2),
+  ('morning_gist', 1, 1, 'Good morning campus! What''s on your schedule today?', null),
+  ('morning_gist', 2, 2, 'Two lectures and a lab. And you?', 1),
+  ('morning_gist', 3, 3, 'One lecture and a long study block.', 1),
+  ('morning_gist', 4, 1, 'Have a productive day, both of you!', 2),
+  ('night_gist', 1, 1, 'How was everybody''s day? 🌙', null),
+  ('night_gist', 2, 2, 'Long, but I got a lot done.', 1),
+  ('night_gist', 3, 3, 'Rested too much, if I''m honest 😂', 1),
+  ('night_gist', 4, 1, 'Rest is part of progress. Sleep well!', 3),
+  ('hobby', 1, 1, 'What do you do for fun outside school?', null),
+  ('hobby', 2, 2, 'Drawing and music. It clears my head.', 1),
+  ('hobby', 3, 3, 'Football and cooking!', 1),
+  ('hobby', 4, 1, 'Cool hobbies. I love reading.', 3),
+  ('weather', 1, 1, 'This heat is not a joke today ☀️', null),
+  ('weather', 2, 2, 'Drink water! Stay hydrated.', 1),
+  ('weather', 3, 3, 'Read in the shade or in {place}, it''s cooler.', 1),
+  ('new_friend', 1, 1, 'I made a new friend at {place} today, small wins 🙌', null),
+  ('new_friend', 2, 2, 'That''s lovely! Friends make campus better.', 1),
+  ('new_friend', 3, 3, 'Hold on to those friendships. They last.', 2);

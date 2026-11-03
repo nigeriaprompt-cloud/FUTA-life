@@ -100,6 +100,22 @@
   };
   P_.badge = function (id, n) { badges[id] = n | 0; buildHome(); const total = Object.values(badges).reduce((a, b) => a + b, 0); btn.classList.toggle('has', total > 0); btn.querySelector('.badge').textContent = total > 99 ? '99+' : total; };
   P_.api = () => g.FutaApi || null;
+  /* ---------- Campus bots: the "BOT" badge + violet dot are drawn from the SERVER's list of bot accounts (rpc list_bots), never from text a player typed.
+     P_.botMark(name) returns a small element to put after a name, or null if that name is not a bot (see supabase/21_bots.sql, docs/BOTS.md). ---------- */
+  let botSet = new Set(), botState = 0; const botWait = [];                 // botState: 0 not asked yet, 1 asking, 2 loaded
+  P_.isBot = (n) => !!n && botSet.has(String(n).toLowerCase());
+  P_.botMark = function (name) {
+    if (botState === 2 && !P_.isBot(name)) return null;
+    const s = document.createElement('span'); s.className = 'ph-bot'; s.title = 'Campus bot: replies are automated'; s.setAttribute('aria-label', 'Campus bot');
+    const i = document.createElement('i'); i.setAttribute('aria-hidden', 'true'); s.append(i, 'BOT');
+    if (botState !== 2) { s.hidden = true; botWait.push([s, name]); }          // shown only once the server has confirmed it
+    return s;
+  };
+  function loadBots() {
+    if (botState !== 0 || !g.FutaApi || !g.FutaApi.rpc || (g.FUTA_CONFIG && g.FUTA_CONFIG.demo)) return; botState = 1;
+    g.FutaApi.rpc('list_bots').then(rows => { botSet = new Set((rows || []).map(r => String(r.username || '').toLowerCase())); botState = 2; botWait.splice(0).forEach(([el, n]) => { if (P_.isBot(n)) el.hidden = false; else el.remove(); }); })
+      .catch(() => { botState = 0; });                                         // the badge is a nicety: if it fails, names simply show without it, and the next sign-in tries again
+  }
   P_.demo = () => !!(g.FUTA_CONFIG && g.FUTA_CONFIG.demo);
 
   /* ---------- sign-in plumbing (loads the same files the sign-up page uses) ---------- */
@@ -113,7 +129,7 @@
       g.FutaApi.onAuth((ev) => { if (ev === 'SIGNED_OUT' && user) { user = null; emit('user', null); renderHome(); if (openApp) P_.home(); } else if (ev === 'SIGNED_IN') P_.refreshUser(); });
     } catch (e) { console.warn('[phone] sign-in code not available:', e.message); }
   }
-  P_.refreshUser = function () { return g.FutaApi.me().then(r => { user = r.user || null; authDone = true; emit('user', user); renderHome(); return user; }).catch(() => { user = null; authDone = true; emit('user', null); renderHome(); return null; }); };
+  P_.refreshUser = function () { return g.FutaApi.me().then(r => { user = r.user || null; authDone = true; if (user) loadBots(); emit('user', user); renderHome(); return user; }).catch(() => { user = null; authDone = true; emit('user', null); renderHome(); return null; }); };
 
   /* ---------- GUEST MODE: anyone can look around; real actions ask them to sign in ----------
      P_.isGuest()            true once we know nobody is signed in (never true in demo mode)
@@ -204,7 +220,7 @@
     const a = apps.get(id); if (!a) return; if (LOGIN_APPS[id] && P_.isGuest()) { P_.requireLogin(LOGIN_APPS[id]); return; } if (openApp) closeApp();
     hideOnClose = !!(opts && opts.hideOnClose); openApp = id; appEl.innerHTML = '<div class="ph-bar"><button class="ph-back" type="button" aria-label="Home">' + ICONS.back + '</button><h2></h2><span class="ph-bar-x"></span></div><div class="ph-body"></div>';
     const h2 = appEl.querySelector('h2'); h2.textContent = a.title || a.name; appEl.querySelector('.ph-back').onclick = () => { if (current && current.back && current.back() === true) return; P_.home(); };
-    const body = appEl.querySelector('.ph-body'); const ctx = { phone: P_, opts: opts || {}, user, esc, el, icons: ICONS, body, bar: appEl.querySelector('.ph-bar-x'), setTitle: (t) => { h2.textContent = t; } };
+    const body = appEl.querySelector('.ph-body'); const ctx = { phone: P_, opts: opts || {}, user, esc, el, icons: ICONS, body, bar: appEl.querySelector('.ph-bar-x'), setTitle: (t, who) => { h2.textContent = t; if (who) { const bm = P_.botMark(who); if (bm) h2.appendChild(bm); } } };
     view.classList.add('in-app'); appEl.classList.add('on');
     try { current = a.mount(body, ctx) || {}; } catch (e) { console.error('[phone app ' + id + ']', e); body.innerHTML = '<p class="ph-note">This app hit a problem. Go back and try again.</p>'; current = {}; }
     emit('open', id);

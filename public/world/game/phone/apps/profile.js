@@ -158,7 +158,7 @@
     const hero = h('div', 'pf-hero'); hero.appendChild(h('div', 'pf-crest', 'FUTAlife'));
     const arch = h('div', 'pf-arch'); const hint = h('div', 'pf-hint', 'drag to turn'); arch.appendChild(hint); hero.appendChild(arch);
     const m3 = mount3d(arch, p.avatar); m3.initial((p.username || '?').charAt(0).toUpperCase());
-    hero.appendChild(h('div', 'pf-name', p.username)); hero.appendChild(h('span', 'pf-stand', top ? lvName(top) + ' standing' : 'Newcomer'));
+    hero.appendChild(h('div', 'pf-name', p.username)); { const bm = (Ph.botMark ? Ph.botMark(p.username) : null); if (bm) hero.lastChild.appendChild(bm); } hero.appendChild(h('span', 'pf-stand', top ? lvName(top) + ' standing' : 'Newcomer'));
     const chips = h('div', 'pf-chips');
     if (p.gender) chips.appendChild(h('span', 'pf-chip', (p.gender === 'female' ? '♀ Female' : '♂ Male')));
     if (p.joined) { const [y, mo] = String(p.joined).split('-'); if (y && mo && MONTHS[+mo - 1]) chips.appendChild(h('span', 'pf-chip', 'Joined ' + MONTHS[+mo - 1] + ' ' + y)); }
